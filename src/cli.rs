@@ -1,4 +1,4 @@
-use chrono::{Datelike, Local, NaiveDateTime, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
 use clap::{arg, ArgMatches, Command};
 
 use crate::base::{self, Todo, TodoInstance};
@@ -69,34 +69,23 @@ fn parse_date_and_time(string: String) -> Option<NaiveDateTime> {
     if let Ok(r) = NaiveDateTime::parse_from_str(&string, "%Y/%m/%d-%H:%M:%S") {
         return Option::Some(r);
     }
-    if let Ok(r) = NaiveDateTime::parse_from_str(
-        &format!("{}/{}", Local::now().year(), &string),
-        "%Y/%m/%d-%H:%M:%S",
-    ) {
+    if let Ok(r) = NaiveDateTime::parse_from_str(&string, "%m/%d-%H:%M:%S") {
         return Option::Some(r);
     }
 
-    if let Ok(r) = NaiveDateTime::parse_from_str(&format!("{}:00", &string), "%Y/%m/%d-%H:%M:%S") {
+    if let Ok(r) = NaiveDateTime::parse_from_str(&string, "%Y/%m/%d-%H:%M") {
         return Option::Some(r);
     }
 
-    if let Ok(r) =
-        NaiveDateTime::parse_from_str(&format!("{}-23:59:00", &string), "%Y/%m/%d-%H:%M:%S")
-    {
+    if let Ok(r) = NaiveDateTime::parse_from_str(&string, "%Y/%m/%d") {
         return Option::Some(r);
     }
 
-    if let Ok(r) = NaiveDateTime::parse_from_str(
-        &format!("{}/{}-23:59:00", Local::now().year(), &string),
-        "%Y/%m/%d-%H:%M:%S",
-    ) {
+    if let Ok(r) = NaiveDateTime::parse_from_str(&string, "%m/%d") {
         return Option::Some(r);
     }
 
-    if let Ok(r) = NaiveDateTime::parse_from_str(
-        &format!("{}/{}:00", Local::now().year(), &string),
-        "%Y/%m/%d-%H:%M:%S",
-    ) {
+    if let Ok(r) = NaiveDateTime::parse_from_str(&string, "%m/%d-%H:%M") {
         return Option::Some(r);
     }
     Option::None
