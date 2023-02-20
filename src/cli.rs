@@ -1,20 +1,26 @@
-use chrono::{Local, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike};
 use clap::{arg, Arg, ArgMatches, Command};
 
 use crate::base::{self, Todo, TodoInstance};
 
 pub fn execute() {
-    let mut instance = TodoInstance::create(".");
-    instance.read_all();
     match cli().get_matches().subcommand() {
         Some(("init", _)) => {
             base::init_repo(".");
         }
         Some(("new", matches)) => {
+            let mut instance = TodoInstance::create(".");
+            instance.read_all();
             let mut todo = Todo::create(matches.get_one::<String>("TITLE").unwrap().to_owned());
             process_edit_todo(matches, &mut todo);
             instance.todos.push(todo);
             instance.write_all();
+        }
+        Some(("list", matches)) => {
+            let mut scanner = TodoScanner::new(TodoInstance::create("."));
+            scanner.instance.read_all();
+            scanner.apply_filters(matches);
+            scanner.list_and_choose();
         }
         _ => unreachable!(),
     }
@@ -42,9 +48,9 @@ fn cli() -> Command {
 
 fn edit_args() -> Vec<Arg> {
     vec![
-        arg!(-n - -name <NAME> "Change name of the target").required(false),
-        arg!(-d - -details <DETAILS> "Change details of the target").required(false),
-        arg!(-w - -date <DATE> "Change date of the target").required(false),
+        arg!(-n --name <NAME> "Change name of the target").required(false),
+        arg!(-d --details <DETAILS> "Change details of the target").required(false),
+        arg!(-w --date <DATE> "Change date of the target").required(false),
         arg!(--ddl <DEADLINE> "Change deadline of the target").required(false),
         arg!(--weight <WEIGHT> "Change weight of the target").required(false),
         arg!(-t --tag <TAGS>... "Bind/unbind tags for the target").required(false),
@@ -62,7 +68,7 @@ fn filter_args() -> Vec<Arg> {
         arg!(--fddlr <DDL_RANGE> "Filter with ranged ddl-only todos")
             .required(false)
             .num_args(2),
-        arg!(--flogged "Filter with logged todos").required(false),
+        arg!(--flogged <LOGGED> "Filter with logged todos").default_value("false"),
         arg!(--ftag <TAGS>... "Filter with tags").required(false),
         arg!(--fname <NAME> "Search with name").required(false),
     ]
@@ -116,29 +122,38 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
 }
 
 fn parse_date_and_time(string: &String) -> Option<NaiveDateTime> {
-    let fmts = vec![
-        "%Y/%m/%d-%H:%M:%S",
-        "%m/%d-%H:%M:%S",
-        "%Y/%m/%d-%H:%M",
-        "%Y/%m/%d",
-        "%m/%d",
-        "%m/%d-%H:%M",
-    ];
+    let temp_str = string.replace("/", "-");
+    let now = Local::now();
 
-    for fmt in fmts {
-        if let Ok(r) = NaiveDateTime::parse_from_str(string, fmt) {
+    for variant in vec![
+        format!("{}-{}", now.year(), temp_str),
+        format!("{}-{}-00:00:00", now.year(), temp_str),
+        format!("{}-{}:00", now.year(), temp_str),
+        format!("{}", temp_str),
+        format!("{}-00:00:00", temp_str),
+        format!("{}:00", temp_str),
+    ] {
+        if let Ok(r) = NaiveDateTime::parse_from_str(&variant, "%Y-%m-%d-%H:%M:%S") {
             return Option::Some(r);
         }
+    }
+
+    if string.to_lowercase().contains("now") {
+        return Option::Some(Local::now().naive_local());
     }
 
     Option::None
 }
 
 fn parse_date(string: &String) -> Option<NaiveDate> {
-    let fmts = vec!["%Y/%m/%d", "%m/%d"];
+    let temp_str = string.replace("/", "-");
+    let now = Local::now();
 
-    for fmt in fmts {
-        if let Ok(r) = NaiveDate::parse_from_str(string, fmt) {
+    for variant in vec![
+        format!("{}-{}", now.year(), temp_str),
+        format!("{}", temp_str),
+    ] {
+        if let Ok(r) = NaiveDate::parse_from_str(&variant, "%Y-%m-%d") {
             return Option::Some(r);
         }
     }
@@ -188,7 +203,7 @@ impl TodoScanner {
     }
 
     fn match_filters(matches: &ArgMatches, todo: &Todo, strict: bool) -> bool {
-        if matches.contains_id("flogged") {
+        if matches.get_one::<String>("flogged").unwrap().eq("true") {
             if !todo.completed {
                 return false;
             }
@@ -319,23 +334,77 @@ impl TodoScanner {
     }
 
     pub fn list_and_choose(&self) -> Vec<u64> {
-        let mut temp = self.cache.clone();
+        let mut vec = Vec::new();
 
-        while !temp.is_empty() {
-            for todo_id in &self.cache {
-                let todo = self.instance.get(todo_id).unwrap();
-                let mut has_dep = false;
-                for dep in &todo.dependents {
-                    if temp.contains(dep) {
-                        has_dep = true;
-                        break;
-                    }
+        for todo_id in &self.cache {
+            let todo = self.instance.get(todo_id).unwrap();
+            let mut has_dep = false;
+            for dep in &todo.dependents {
+                if self.cache.contains(dep) {
+                    has_dep = true;
+                    break;
                 }
+            }
 
-                if !has_dep {}
+            if !has_dep {
+                vec.append(&mut self.as_tree(todo_id, &self.cache));
             }
         }
 
-        vec![]
+        if vec.is_empty() {
+            Vec::new()
+        } else {
+            for todo in &vec {
+                println!("{}", todo);
+            }
+            vec![]
+        }
     }
+
+    fn as_tree(&self, id: &u64, range: &Vec<u64>) -> Vec<String> {
+        let todo = self.instance.get(&id).unwrap();
+        let mut vec = vec![format_todo(todo)];
+        for child in self.instance.get_children_once(id) {
+            if range.contains(&child) {
+                for temp in self.as_tree(&child, range) {
+                    vec.push(format!("   {}", temp));
+                }
+            }
+        }
+
+        vec
+    }
+}
+
+fn format_todo(todo: &Todo) -> String {
+    format!(
+        "└─ {}{} {}{}",
+        if todo.metadata.details.is_empty() {
+            todo.metadata.name.to_owned()
+        } else {
+            format!("{}: {}", todo.metadata.name, todo.metadata.details)
+        },
+        {
+            let mut temp = String::new();
+            for tag in &todo.tags {
+                temp = format!("{} [{}]", temp, tag);
+            }
+            temp
+        },
+        {
+            if let Some(date) = todo.time {
+                format!(" / DATE-{}", date)
+            } else {
+                String::new()
+            }
+        },
+        {
+            if let Some(ddl) = todo.deadline {
+                let real = ddl.and_local_timezone(Local).unwrap();
+                format!(" / DDL-{} {}:{}", ddl.date(), real.hour(), real.minute())
+            } else {
+                String::new()
+            }
+        }
+    )
 }

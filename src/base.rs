@@ -208,10 +208,10 @@ impl TodoInstance {
         vec
     }
 
-    pub fn get_children_once(&self, id: u64) -> Vec<u64> {
+    pub fn get_children_once(&self, id: &u64) -> Vec<u64> {
         let mut vec = Vec::new();
         for todo in &self.todos {
-            if todo.dependents.contains(&id) {
+            if todo.dependents.contains(id) {
                 vec.push(*todo.get_id());
             }
         }
