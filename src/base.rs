@@ -201,7 +201,7 @@ impl TodoInstance {
     pub fn get_children(&self, id: &u64) -> Vec<u64> {
         let mut vec = Vec::new();
         for todo in &self.todos {
-            if self.get_all_deps_of(&todo.id).contains(id) {
+            if self.get_all_deps(&todo.id).contains(id) {
                 vec.push(*todo.get_id());
             }
         }
@@ -222,7 +222,7 @@ impl TodoInstance {
         if father == child {
             return false;
         }
-        !(self.get_all_deps_of(father).contains(child) || self.get_children(father).contains(child))
+        !(self.get_all_deps(father).contains(child) || self.get_children(father).contains(child))
     }
 
     pub fn replace(&mut self, replacement: Todo) -> bool {
@@ -251,13 +251,13 @@ impl TodoInstance {
         }
     }
 
-    pub fn get_all_deps_of(&self, id: &u64) -> Vec<u64> {
+    pub fn get_all_deps(&self, id: &u64) -> Vec<u64> {
         let mut vec = Vec::new();
         if let Some(target) = self.get(id) {
             for dep in &target.dependents {
                 if let Some(todo) = self.get(dep) {
                     vec.push(*todo.get_id());
-                    for t in self.get_all_deps_of(dep) {
+                    for t in self.get_all_deps(dep) {
                         vec.push(t);
                     }
                 }
