@@ -1,5 +1,11 @@
+use std::{
+    fs::File,
+    io::{Read, Write},
+};
+
 use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike};
 use clap::{arg, Arg, ArgMatches, Command};
+use serde::{Deserialize, Serialize};
 
 use crate::base::{self, Todo, TodoInstance};
 
@@ -33,6 +39,66 @@ pub fn execute() {
             }
             scanner.instance.write_all();
         }
+        Some(("complete", matches)) => {
+            let mut scanner = TodoScanner::new(TodoInstance::create("."));
+            scanner.instance.read_all();
+            scanner.apply_filters(matches);
+            for todo_id in scanner.list(true) {
+                if let Some(todo) = scanner.instance.get_mut(&todo_id) {
+                    todo.completed = true;
+                }
+            }
+            scanner.instance.write_all();
+        }
+        Some(("father", matches)) => {
+            let mut scanner = TodoScanner::new(TodoInstance::create("."));
+            let mut cache = TodoCache::create();
+            scanner.instance.read_all();
+            scanner.apply_filters(matches);
+            for todo_id in scanner.list(true) {
+                cache.father = Option::Some(todo_id);
+                break;
+            }
+
+            if let Some(father) = &cache.father {
+                for child in &cache.child {
+                    scanner
+                        .instance
+                        .get_mut(child)
+                        .unwrap()
+                        .dependents
+                        .push(*father);
+                }
+                cache.clean()
+            }
+
+            cache.write();
+            scanner.instance.write_all();
+        }
+        Some(("child", matches)) => {
+            let mut scanner = TodoScanner::new(TodoInstance::create("."));
+            let mut cache = TodoCache::create();
+            scanner.instance.read_all();
+            scanner.apply_filters(matches);
+            for todo_id in scanner.list(true) {
+                cache.child.push(todo_id);
+            }
+
+            if let Some(father) = &cache.father {
+                for child in &cache.child {
+                    scanner
+                        .instance
+                        .get_mut(child)
+                        .unwrap()
+                        .dependents
+                        .push(*father);
+                }
+                cache.clean()
+            }
+
+            cache.write();
+            scanner.instance.write_all();
+        }
         _ => unreachable!(),
     }
 }
@@ -52,14 +118,29 @@ fn cli() -> Command {
         )
         .subcommand(
             Command::new("list")
-                .about("List todos with filter")
+                .about("List todos with filters")
                 .args(filter_args()),
         )
         .subcommand(
             Command::new("edit")
-                .about("Edit todos with filter")
+                .about("Edit todos with filters")
                 .args(filter_args())
                 .args(edit_args()),
+        )
+        .subcommand(
+            Command::new("complete")
+                .about("Complete todos with filters")
+                .args(filter_args()),
+        )
+        .subcommand(
+            Command::new("father")
+                .about("Mark a todo as father with filters")
+                .args(filter_args()),
+        )
+        .subcommand(
+            Command::new("child")
+                .about("Mark todos as children with filters")
+                .args(filter_args()),
         )
 }
 
@@ -71,6 +152,7 @@ fn edit_args() -> Vec<Arg> {
         arg!(--ddl <DEADLINE> "Change deadline of the target").required(false),
         arg!(--weight <WEIGHT> "Change weight of the target").required(false),
         arg!(-t --tag <TAGS>... "Bind/unbind tags for the target").required(false),
+        arg!(-c --complete <BOOLEAN>... "Complete/uncomplete the target").required(false),
     ]
 }
 
@@ -92,6 +174,10 @@ fn filter_args() -> Vec<Arg> {
 }
 
 fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
+    if let Some(n) = matches.get_one::<String>("complete") {
+        todo.completed = if n.eq("true") { true } else { false };
+    }
+
     if let Some(n) = matches.get_one::<String>("name") {
         todo.metadata.name = n.to_owned();
     }
@@ -417,7 +503,10 @@ impl TodoScanner {
         vec.push(FormattedTodo::of(*id, format_todo(todo)));
         for child in self.instance.get_children_once(id) {
             if range.contains(&child) {
-                vec.append(&mut self.as_tree(&child, range));
+                for mut i in self.as_tree(&child, range) {
+                    i.string = format!("   {}", i.string);
+                    vec.push(i);
+                }
             }
         }
 
@@ -518,5 +607,38 @@ struct FormattedTodo {
 impl FormattedTodo {
     pub fn of(id: u64, string: String) -> Self {
         FormattedTodo { string, id }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct TodoCache {
+    pub father: Option<u64>,
+    pub child: Vec<u64>,
+}
+
+impl TodoCache {
+    pub fn create() -> Self {
+        if let Ok(mut f) = File::open("./.todo/cache.json") {
+            let mut str = String::new();
+            f.read_to_string(&mut str).unwrap();
+            serde_json::from_str::<TodoCache>(&str).unwrap()
+        } else {
+            Self {
+                father: Option::None,
+                child: Vec::new(),
+            }
+        }
+    }
+
+    pub fn write(&self) {
+        File::create("./.todo/cache.json")
+            .unwrap()
+            .write(serde_json::to_string(self).unwrap().as_bytes())
+            .unwrap();
+    }
+
+    pub fn clean(&mut self) {
+        self.father = Option::None;
+        self.child = Vec::new();
     }
 }
