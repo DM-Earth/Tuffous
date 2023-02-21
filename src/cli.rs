@@ -20,7 +20,18 @@ pub fn execute() {
             let mut scanner = TodoScanner::new(TodoInstance::create("."));
             scanner.instance.read_all();
             scanner.apply_filters(matches);
-            scanner.list_and_choose();
+            scanner.list(false);
+        }
+        Some(("edit", matches)) => {
+            let mut scanner = TodoScanner::new(TodoInstance::create("."));
+            scanner.instance.read_all();
+            scanner.apply_filters(matches);
+            for todo_id in scanner.list(true) {
+                if let Some(todo) = scanner.instance.get_mut(&todo_id) {
+                    process_edit_todo(matches, todo);
+                }
+            }
+            scanner.instance.write_all();
         }
         _ => unreachable!(),
     }
@@ -44,6 +55,12 @@ fn cli() -> Command {
                 .about("List todos with filter")
                 .args(filter_args()),
         )
+        .subcommand(
+            Command::new("edit")
+                .about("Edit todos with filter")
+                .args(filter_args())
+                .args(edit_args()),
+        )
 }
 
 fn edit_args() -> Vec<Arg> {
@@ -59,7 +76,7 @@ fn edit_args() -> Vec<Arg> {
 
 fn filter_args() -> Vec<Arg> {
     vec![
-        arg!(--ftoday "Filter with today only todos").required(false),
+        arg!(--ftoday <TODAY> "Filter with today only todos").default_value("false"),
         arg!(--fdate <DATE> "Filter with date-only todos").required(false),
         arg!(--fdater <DATE_RANGE> "Filter with ranged date-only todos")
             .required(false)
@@ -211,9 +228,13 @@ impl TodoScanner {
             return false;
         }
 
-        if matches.contains_id("ftoday") {
-            if let Some(d) = todo.time {
-                if !d.eq(&Local::now().date_naive()) {
+        if let Some(n) = matches.get_one::<String>("ftoday") {
+            if n.eq("true") {
+                if let Some(d) = todo.time {
+                    if !date_eq(&d, &Local::now().date_naive()) {
+                        return false;
+                    }
+                } else {
                     return false;
                 }
             }
@@ -222,10 +243,12 @@ impl TodoScanner {
         if let Some(n) = matches.get_one::<String>("fdate") {
             if let Some(d) = todo.time {
                 if let Some(m) = parse_date(n) {
-                    if !d.eq(&m) {
+                    if !date_eq(&d, &m) {
                         return false;
                     }
                 }
+            } else {
+                return false;
             }
         }
 
@@ -255,6 +278,8 @@ impl TodoScanner {
                 if skip {
                     return false;
                 }
+            } else {
+                return false;
             }
         }
 
@@ -266,6 +291,8 @@ impl TodoScanner {
                             return false;
                         }
                     }
+                } else {
+                    return false;
                 }
             }
 
@@ -296,6 +323,8 @@ impl TodoScanner {
                     if skip {
                         return false;
                     }
+                } else {
+                    return false;
                 }
             }
 
@@ -333,7 +362,7 @@ impl TodoScanner {
         true
     }
 
-    pub fn list_and_choose(&self) -> Vec<u64> {
+    pub fn list(&self, choose: bool) -> Vec<u64> {
         let mut vec = Vec::new();
 
         for todo_id in &self.cache {
@@ -354,21 +383,41 @@ impl TodoScanner {
         if vec.is_empty() {
             Vec::new()
         } else {
-            for todo in &vec {
-                println!("{}", todo);
+            println!("{} todos:", vec.len());
+            if choose {
+                for todo in vec.iter().enumerate() {
+                    println!("[{}] {}", todo.0 + 1, todo.1.string);
+                }
+
+                println!("\nPlease enter your selection:");
+
+                let mut ret_vec = Vec::new();
+
+                for sel in parse_selection(&input_string()) {
+                    for v in vec.iter().enumerate() {
+                        if v.0 == sel as usize - 1 {
+                            ret_vec.push(v.1.id);
+                        }
+                    }
+                }
+
+                ret_vec
+            } else {
+                for todo in &vec {
+                    println!("{}", todo.string);
+                }
+                vec![]
             }
-            vec![]
         }
     }
 
-    fn as_tree(&self, id: &u64, range: &Vec<u64>) -> Vec<String> {
+    fn as_tree(&self, id: &u64, range: &Vec<u64>) -> Vec<FormattedTodo> {
         let todo = self.instance.get(&id).unwrap();
-        let mut vec = vec![format_todo(todo)];
+        let mut vec = Vec::new();
+        vec.push(FormattedTodo::of(*id, format_todo(todo)));
         for child in self.instance.get_children_once(id) {
             if range.contains(&child) {
-                for temp in self.as_tree(&child, range) {
-                    vec.push(format!("   {}", temp));
-                }
+                vec.append(&mut self.as_tree(&child, range));
             }
         }
 
@@ -393,7 +442,7 @@ fn format_todo(todo: &Todo) -> String {
         },
         {
             if let Some(date) = todo.time {
-                format!(" / DATE-{}", date)
+                format!(" / DATE- {}", date)
             } else {
                 String::new()
             }
@@ -401,10 +450,73 @@ fn format_todo(todo: &Todo) -> String {
         {
             if let Some(ddl) = todo.deadline {
                 let real = ddl.and_local_timezone(Local).unwrap();
-                format!(" / DDL-{} {}:{}", ddl.date(), real.hour(), real.minute())
+                format!(" / DDL- {} {}:{}", ddl.date(), real.hour(), real.minute())
             } else {
                 String::new()
             }
         }
     )
+}
+
+fn date_eq(date1: &NaiveDate, date2: &NaiveDate) -> bool {
+    date1.year() == date2.year() && date1.month() == date2.month() && date1.day() == date2.day()
+}
+
+fn parse_selection(string: &String) -> Vec<u64> {
+    let mut vec = Vec::new();
+    for obj in string.replace(",", " ").split_whitespace() {
+        if let Ok(num) = obj.parse::<u64>() {
+            if !vec.contains(&num) {
+                vec.push(num);
+            }
+        } else if obj.contains("-") {
+            let mut n1 = 0;
+            let mut n2 = 0;
+
+            {
+                let mut index = 0;
+                for obj2 in obj.replace("-", " ").split_whitespace() {
+                    if let Ok(num2) = obj2.parse::<u64>() {
+                        if index == 0 {
+                            n1 = num2;
+                        }
+
+                        if index == 1 {
+                            n2 = num2;
+                        }
+
+                        index += 1;
+                    }
+                }
+            }
+
+            if n1 > 0 && n2 > 0 {
+                while n1 <= n2 {
+                    vec.push(n1);
+                    n1 += 1;
+                }
+            }
+        }
+    }
+
+    vec
+}
+
+fn input_string() -> String {
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .expect("read_line error!");
+    input.lines().next().unwrap().to_string()
+}
+
+struct FormattedTodo {
+    pub string: String,
+    pub id: u64,
+}
+
+impl FormattedTodo {
+    pub fn of(id: u64, string: String) -> Self {
+        FormattedTodo { string, id }
+    }
 }
