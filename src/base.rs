@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-use chrono::{NaiveDate, NaiveDateTime, Utc};
+use chrono::{Local, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub fn init_repo(path: &str) {
@@ -272,6 +272,7 @@ impl TodoInstance {
         let todos = self.get_todos();
         for todo_id in &todos {
             if let Some(todo) = self.get_mut(todo_id) {
+                // Remove broken deps
                 loop {
                     let mut rm = 0;
                     let mut remove = false;
@@ -287,6 +288,13 @@ impl TodoInstance {
                         todo.dependents.remove(rm);
                     } else {
                         break;
+                    }
+                }
+
+                // Correct time
+                if let Some(date) = &todo.time {
+                    if date < &Local::now().date_naive() {
+                        todo.time = Some(Local::now().date_naive());
                     }
                 }
             }
@@ -308,5 +316,17 @@ impl TodoInstance {
         }
         self.refresh();
         fs::remove_file(format!("{}/.todo/todos/{}.json", self.path, id)).unwrap();
+    }
+
+    pub fn get_weight(&self, id: &u64, completed: bool) -> u32 {
+        let mut base = self.get(id).unwrap().weight.clone();
+
+        for child in self.get_children_once(id) {
+            if self.get(&child).unwrap().completed || !completed {
+                base += self.get_weight(&child, completed);
+            }
+        }
+
+        base
     }
 }

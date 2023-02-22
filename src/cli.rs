@@ -17,6 +17,7 @@ pub fn execute() {
         Some(("new", matches)) => {
             let mut instance = TodoInstance::create(".");
             instance.read_all();
+            instance.refresh();
             let mut todo = Todo::create(matches.get_one::<String>("TITLE").unwrap().to_owned());
             process_edit_todo(matches, &mut todo);
             instance.todos.push(todo);
@@ -25,12 +26,14 @@ pub fn execute() {
         Some(("list", matches)) => {
             let mut scanner = TodoScanner::new(TodoInstance::create("."));
             scanner.instance.read_all();
+            scanner.instance.refresh();
             scanner.apply_filters(matches);
             scanner.list(false);
         }
         Some(("edit", matches)) => {
             let mut scanner = TodoScanner::new(TodoInstance::create("."));
             scanner.instance.read_all();
+            scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
                 if let Some(todo) = scanner.instance.get_mut(&todo_id) {
@@ -42,6 +45,7 @@ pub fn execute() {
         Some(("complete", matches)) => {
             let mut scanner = TodoScanner::new(TodoInstance::create("."));
             scanner.instance.read_all();
+            scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
                 if let Some(todo) = scanner.instance.get_mut(&todo_id) {
@@ -54,6 +58,7 @@ pub fn execute() {
             let mut scanner = TodoScanner::new(TodoInstance::create("."));
             let mut cache = TodoCache::create();
             scanner.instance.read_all();
+            scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
                 cache.father = Option::Some(todo_id);
@@ -67,6 +72,7 @@ pub fn execute() {
             let mut scanner = TodoScanner::new(TodoInstance::create("."));
             let mut cache = TodoCache::create();
             scanner.instance.read_all();
+            scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
                 cache.child.push(todo_id);
@@ -79,6 +85,7 @@ pub fn execute() {
             let mut scanner = TodoScanner::new(TodoInstance::create("."));
             let mut cache = TodoCache::create();
             scanner.instance.read_all();
+            scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
                 scanner.instance.remove(&todo_id);
@@ -98,7 +105,7 @@ pub fn execute() {
 
 fn cli() -> Command {
     Command::new("todo")
-        .about("A simple to-do manager")
+        .about("A powerful to-do manager in CLI")
         .subcommand_required(false)
         .arg_required_else_help(true)
         .allow_external_subcommands(true)
@@ -185,8 +192,10 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
         todo.metadata.details = n.to_owned();
     }
 
-    if let Some(n) = matches.get_one::<u32>("weight") {
-        todo.weight = *n;
+    if let Some(n) = matches.get_one::<String>("weight") {
+        if let Ok(num) = n.parse::<u32>() {
+            todo.weight = num;
+        }
     }
 
     if let Some(n) = matches.get_one::<String>("ddl") {
@@ -499,7 +508,23 @@ impl TodoScanner {
     fn as_tree(&self, id: &u64, range: &Vec<u64>) -> Vec<FormattedTodo> {
         let todo = self.instance.get(&id).unwrap();
         let mut vec = Vec::new();
-        vec.push(FormattedTodo::of(*id, format_todo(todo)));
+
+        vec.push(FormattedTodo::of(
+            *id,
+            format!(
+                "{}{}",
+                format_todo(todo),
+                if self.instance.get_children_once(id).is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        " ({}/{})",
+                        self.instance.get_weight(id, true),
+                        self.instance.get_weight(id, false)
+                    )
+                }
+            ),
+        ));
         for child in self.instance.get_children_once(id) {
             if range.contains(&child) {
                 for mut i in self.as_tree(&child, range) {
@@ -515,7 +540,34 @@ impl TodoScanner {
 
 fn format_todo(todo: &Todo) -> String {
     format!(
-        "└─ {}{} {}{}",
+        "└─ {}{}{} {}{}{}",
+        {
+            let mut flags = String::new();
+
+            if let Some(date) = &todo.time {
+                if date.eq(&Local::now().date_naive()) {
+                    flags = format!("{flags}");
+                }
+            }
+
+            if todo.completed {
+                flags = format!("{flags}󰄲");
+            }
+
+            if let Some(ddl) = &todo.deadline {
+                if ddl <= &Local::now().naive_local() {
+                    flags = format!("{flags}󱂴");
+                } else if ddl.date().eq(&Local::now().date_naive()) {
+                    flags = format!("{flags}󰈽");
+                }
+            }
+
+            if flags.is_empty() {
+                String::new()
+            } else {
+                format!("{flags} ")
+            }
+        },
         if todo.metadata.details.is_empty() {
             todo.metadata.name.to_owned()
         } else {
@@ -530,7 +582,7 @@ fn format_todo(todo: &Todo) -> String {
         },
         {
             if let Some(date) = todo.time {
-                format!(" / DATE- {}", date)
+                format!(" -󰃭 {}", date)
             } else {
                 String::new()
             }
@@ -538,10 +590,22 @@ fn format_todo(todo: &Todo) -> String {
         {
             if let Some(ddl) = todo.deadline {
                 let real = ddl.and_local_timezone(Local).unwrap();
-                format!(" / DDL- {} {}:{}", ddl.date(), real.hour(), real.minute())
+                format!(" -󰈻 {} {}:{}", ddl.date(), real.hour(), real.minute())
             } else {
                 String::new()
             }
+        },
+        if todo.weight > 1 {
+            let mut str = String::from(" ");
+            let mut i = 1;
+            while i < todo.weight {
+                str = format!("{str}!");
+                i += 1;
+            }
+
+            str
+        } else {
+            String::new()
         }
     )
 }
