@@ -59,19 +59,7 @@ pub fn execute() {
                 cache.father = Option::Some(todo_id);
                 break;
             }
-
-            if let Some(father) = &cache.father {
-                for child in &cache.child {
-                    scanner
-                        .instance
-                        .get_mut(child)
-                        .unwrap()
-                        .dependents
-                        .push(*father);
-                }
-                cache.clean()
-            }
-
+            cache.process(&mut scanner.instance);
             cache.write();
             scanner.instance.write_all();
         }
@@ -83,21 +71,26 @@ pub fn execute() {
             for todo_id in scanner.list(true) {
                 cache.child.push(todo_id);
             }
-
-            if let Some(father) = &cache.father {
-                for child in &cache.child {
-                    scanner
-                        .instance
-                        .get_mut(child)
-                        .unwrap()
-                        .dependents
-                        .push(*father);
-                }
-                cache.clean()
-            }
-
+            cache.process(&mut scanner.instance);
             cache.write();
             scanner.instance.write_all();
+        }
+        Some(("remove", matches)) => {
+            let mut scanner = TodoScanner::new(TodoInstance::create("."));
+            let mut cache = TodoCache::create();
+            scanner.instance.read_all();
+            scanner.apply_filters(matches);
+            for todo_id in scanner.list(true) {
+                scanner.instance.remove(&todo_id);
+            }
+            cache.clean();
+            cache.write();
+            scanner.instance.write_all();
+        }
+        Some(("cleancache", _)) => {
+            let mut cache = TodoCache::create();
+            cache.clean();
+            cache.write();
         }
         _ => unreachable!(),
     }
@@ -112,36 +105,42 @@ fn cli() -> Command {
         .subcommand(Command::new("init").about("Initialize a new todo repo"))
         .subcommand(
             Command::new("new")
-                .about("Create a new todo into the repo")
+                .about("Create a new todo")
                 .arg(arg!(<TITLE> "The name of the todo"))
                 .args(edit_args()),
         )
         .subcommand(
             Command::new("list")
-                .about("List todos with filters")
+                .about("List todo(s) with filter(s)")
                 .args(filter_args()),
         )
         .subcommand(
             Command::new("edit")
-                .about("Edit todos with filters")
+                .about("Edit todo(s) with filter(s)")
                 .args(filter_args())
                 .args(edit_args()),
         )
         .subcommand(
             Command::new("complete")
-                .about("Complete todos with filters")
+                .about("Complete todo(s) with filter(s)")
                 .args(filter_args()),
         )
         .subcommand(
             Command::new("father")
-                .about("Mark a todo as father with filters")
+                .about("Mark a todo as father with filter(s) in the cache")
                 .args(filter_args()),
         )
         .subcommand(
             Command::new("child")
-                .about("Mark todos as children with filters")
+                .about("Mark todo(s) as children with filter(s) in the cache")
                 .args(filter_args()),
         )
+        .subcommand(
+            Command::new("remove")
+                .about("Remove todo(s) as children with filter(s)")
+                .args(filter_args()),
+        )
+        .subcommand(Command::new("cleancache").about("Clean cache"))
 }
 
 fn edit_args() -> Vec<Arg> {
@@ -158,16 +157,16 @@ fn edit_args() -> Vec<Arg> {
 
 fn filter_args() -> Vec<Arg> {
     vec![
-        arg!(--ftoday <TODAY> "Filter with today only todos").default_value("false"),
-        arg!(--fdate <DATE> "Filter with date-only todos").required(false),
-        arg!(--fdater <DATE_RANGE> "Filter with ranged date-only todos")
+        arg!(--ftoday <TODAY> "Filter with today only todo(s)").default_value("false"),
+        arg!(--fdate <DATE> "Filter with date-only todo(s)").required(false),
+        arg!(--fdater <DATE_RANGE> "Filter with ranged date-only todo(s)")
             .required(false)
             .num_args(2),
-        arg!(--fddl <DDL> "Filter with ddl-only todos").required(false),
-        arg!(--fddlr <DDL_RANGE> "Filter with ranged ddl-only todos")
+        arg!(--fddl <DDL> "Filter with ddl-only todo(s)").required(false),
+        arg!(--fddlr <DDL_RANGE> "Filter with ranged ddl-only todo(s)")
             .required(false)
             .num_args(2),
-        arg!(--flogged <LOGGED> "Filter with logged todos").default_value("false"),
+        arg!(--flogged <LOGGED> "Filter with logged todo(s)").default_value("false"),
         arg!(--ftag <TAGS>... "Filter with tags").required(false),
         arg!(--fname <NAME> "Search with name").required(false),
     ]
@@ -310,7 +309,7 @@ impl TodoScanner {
             if !todo.completed {
                 return false;
             }
-        } else if todo.completed {
+        } else if todo.completed && matches.get_one::<String>("flogged").unwrap().eq("false") {
             return false;
         }
 
@@ -640,5 +639,32 @@ impl TodoCache {
     pub fn clean(&mut self) {
         self.father = Option::None;
         self.child = Vec::new();
+    }
+
+    pub fn process(&mut self, instance: &mut TodoInstance) {
+        if !self.child.is_empty() {
+            if let Some(father) = &self.father {
+                for child in &self.child {
+                    if instance.get(child).unwrap().dependents.contains(father) {
+                        let mut rm = 0;
+                        for dep in instance
+                            .get_mut(child)
+                            .unwrap()
+                            .dependents
+                            .iter()
+                            .enumerate()
+                        {
+                            if dep.1 == father {
+                                rm = dep.0;
+                            }
+                        }
+                        instance.get_mut(child).unwrap().dependents.remove(rm);
+                    } else {
+                        instance.get_mut(child).unwrap().dependents.push(*father);
+                    }
+                }
+                self.clean()
+            }
+        }
     }
 }

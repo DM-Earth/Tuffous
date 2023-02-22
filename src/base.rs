@@ -267,4 +267,46 @@ impl TodoInstance {
             vec
         }
     }
+
+    pub fn refresh(&mut self) {
+        let todos = self.get_todos();
+        for todo_id in &todos {
+            if let Some(todo) = self.get_mut(todo_id) {
+                loop {
+                    let mut rm = 0;
+                    let mut remove = false;
+                    for dep in todo.dependents.iter().enumerate() {
+                        if !todos.contains(&dep.1) {
+                            rm = dep.0;
+                            remove = true;
+                            break;
+                        }
+                    }
+
+                    if remove {
+                        todo.dependents.remove(rm);
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn remove(&mut self, id: &u64) {
+        let mut rm = 0;
+        let mut remove = false;
+
+        for todo in self.todos.iter().enumerate() {
+            if todo.1.get_id().eq(id) {
+                rm = todo.0;
+                remove = true;
+            }
+        }
+        if remove {
+            self.todos.remove(rm);
+        }
+        self.refresh();
+        fs::remove_file(format!("{}/.todo/todos/{}.json", self.path, id)).unwrap();
+    }
 }
