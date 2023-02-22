@@ -322,62 +322,62 @@ impl TodoScanner {
             return false;
         }
 
-        if let Some(n) = matches.get_one::<String>("ftoday") {
-            if n.eq("true") {
+        if strict {
+            if let Some(n) = matches.get_one::<String>("ftoday") {
+                if n.eq("true") {
+                    if let Some(d) = todo.time {
+                        if !date_eq(&d, &Local::now().date_naive()) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+            }
+
+            if let Some(n) = matches.get_one::<String>("fdate") {
                 if let Some(d) = todo.time {
-                    if !date_eq(&d, &Local::now().date_naive()) {
+                    if let Some(m) = parse_date(n) {
+                        if !date_eq(&d, &m) {
+                            return false;
+                        }
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            if let Some(n) = matches.get_many::<String>("fdater") {
+                if let Some(date) = todo.time {
+                    let mut index = 0;
+                    let mut skip = false;
+                    for nd in n {
+                        index += 1;
+                        if index == 1 {
+                            if let Some(d) = parse_date(nd) {
+                                if d > date {
+                                    skip = true;
+                                }
+                            }
+                        }
+
+                        if index == 2 {
+                            if let Some(d) = parse_date(nd) {
+                                if d < date {
+                                    skip = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if skip {
                         return false;
                     }
                 } else {
                     return false;
                 }
             }
-        }
 
-        if let Some(n) = matches.get_one::<String>("fdate") {
-            if let Some(d) = todo.time {
-                if let Some(m) = parse_date(n) {
-                    if !date_eq(&d, &m) {
-                        return false;
-                    }
-                }
-            } else {
-                return false;
-            }
-        }
-
-        if let Some(n) = matches.get_many::<String>("fdater") {
-            if let Some(date) = todo.time {
-                let mut index = 0;
-                let mut skip = false;
-                for nd in n {
-                    index += 1;
-                    if index == 1 {
-                        if let Some(d) = parse_date(nd) {
-                            if d > date {
-                                skip = true;
-                            }
-                        }
-                    }
-
-                    if index == 2 {
-                        if let Some(d) = parse_date(nd) {
-                            if d < date {
-                                skip = true;
-                            }
-                        }
-                    }
-                }
-
-                if skip {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-
-        if strict {
             if let Some(n) = matches.get_one::<String>("fddl") {
                 if let Some(d) = todo.deadline {
                     if let Some(m) = parse_date(n) {
