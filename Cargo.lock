@@ -446,7 +446,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "todo_rs"
+name = "tuffous"
 version = "0.1.0"
 dependencies = [
  "chrono",
