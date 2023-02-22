@@ -319,7 +319,11 @@ impl TodoInstance {
     }
 
     pub fn get_weight(&self, id: &u64, completed: bool) -> u32 {
-        let mut base = self.get(id).unwrap().weight.clone();
+        let mut base = 0;
+        if self.get_children_once(id).is_empty() && (self.get(id).unwrap().completed || !completed)
+        {
+            base += self.get(id).unwrap().weight
+        }
 
         for child in self.get_children_once(id) {
             if self.get(&child).unwrap().completed || !completed {

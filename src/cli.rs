@@ -212,7 +212,7 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
 
     if let Some(ns) = matches.get_many::<String>("tag") {
         for n in ns {
-            if let Some(x) = n.strip_prefix("!") {
+            if let Some(x) = n.strip_suffix("!") {
                 let xs = x.to_owned();
                 if todo.tags.contains(&xs) {
                     for t in todo.tags.iter().enumerate() {
@@ -425,7 +425,7 @@ impl TodoScanner {
             if let Some(n) = matches.get_many::<String>("ftag") {
                 let mut skip = false;
                 for nd in n {
-                    if let Some(np) = nd.strip_prefix("!") {
+                    if let Some(np) = nd.strip_suffix("!") {
                         if todo.tags.contains(&np.to_string()) {
                             skip = true;
                             break;
