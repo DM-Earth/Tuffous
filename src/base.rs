@@ -15,7 +15,7 @@ pub fn init_repo(path: &str) {
 }
 
 fn create_path(path: &str) {
-    if let Err(x) = fs::create_dir(format!("{path}")) {
+    if let Err(x) = fs::create_dir(path) {
         if x.to_string().contains("File exists") {
         } else {
             panic!("Error when initializing todo repo: {}", x)
@@ -76,7 +76,7 @@ impl Todo {
     pub fn write_to_file(&self, path: &str) {
         let p = format!("{path}/.todo/todos/{}.json", self.get_id());
 
-        let Ok(mut file) = File::create(&p) else { return };
+        let Ok(mut file) = File::create(p) else { return };
         file.write(serde_json::to_string(self).unwrap().as_bytes())
             .unwrap();
     }
@@ -111,14 +111,14 @@ impl PartialEq for Todo {
 impl Clone for Todo {
     fn clone(&self) -> Self {
         Self {
-            id: self.id.clone(),
-            completed: self.completed.clone(),
-            creation_date: self.creation_date.clone(),
-            deadline: self.deadline.clone(),
-            time: self.time.clone(),
+            id: self.id,
+            completed: self.completed,
+            creation_date: self.creation_date,
+            deadline: self.deadline,
+            time: self.time,
             dependents: self.dependents.clone(),
             tags: self.tags.clone(),
-            weight: self.weight.clone(),
+            weight: self.weight,
             metadata: self.metadata.clone(),
         }
     }
@@ -173,12 +173,7 @@ impl TodoInstance {
     }
 
     pub fn get(&self, id: &u64) -> Option<&Todo> {
-        for todo in &self.todos {
-            if todo.get_id().eq(id) {
-                return Option::Some(todo);
-            }
-        }
-        Option::None
+        self.todos.iter().find(|&todo| todo.get_id().eq(id))
     }
 
     pub fn get_mut(&mut self, id: &u64) -> Option<&mut Todo> {
@@ -277,7 +272,7 @@ impl TodoInstance {
                     let mut rm = 0;
                     let mut remove = false;
                     for dep in todo.dependents.iter().enumerate() {
-                        if !todos.contains(&dep.1) {
+                        if !todos.contains(dep.1) {
                             rm = dep.0;
                             remove = true;
                             break;

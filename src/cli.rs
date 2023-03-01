@@ -181,7 +181,7 @@ fn filter_args() -> Vec<Arg> {
 
 fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
     if let Some(n) = matches.get_one::<String>("complete") {
-        todo.completed = if n.eq("true") { true } else { false };
+        todo.completed = n.eq("true");
     }
 
     if let Some(n) = matches.get_one::<String>("name") {
@@ -212,7 +212,7 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
 
     if let Some(ns) = matches.get_many::<String>("tag") {
         for n in ns {
-            if let Some(x) = n.strip_suffix("!") {
+            if let Some(x) = n.strip_suffix('!') {
                 let xs = x.to_owned();
                 if todo.tags.contains(&xs) {
                     for t in todo.tags.iter().enumerate() {
@@ -233,7 +233,7 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
 }
 
 fn parse_date_and_time(string: &String) -> Option<NaiveDateTime> {
-    let temp_str = string.replace("/", "-");
+    let temp_str = string.replace('/', "-");
     let now = Local::now();
 
     for variant in vec![
@@ -257,7 +257,7 @@ fn parse_date_and_time(string: &String) -> Option<NaiveDateTime> {
 }
 
 fn parse_date(string: &String) -> Option<NaiveDate> {
-    let temp_str = string.replace("/", "-");
+    let temp_str = string.replace('/', "-");
     let now = Local::now();
 
     for variant in vec![
@@ -425,7 +425,7 @@ impl TodoScanner {
             if let Some(n) = matches.get_many::<String>("ftag") {
                 let mut skip = false;
                 for nd in n {
-                    if let Some(np) = nd.strip_suffix("!") {
+                    if let Some(np) = nd.strip_suffix('!') {
                         if todo.tags.contains(&np.to_string()) {
                             skip = true;
                             break;
@@ -506,7 +506,7 @@ impl TodoScanner {
     }
 
     fn as_tree(&self, id: &u64, range: &Vec<u64>) -> Vec<FormattedTodo> {
-        let todo = self.instance.get(&id).unwrap();
+        let todo = self.instance.get(id).unwrap();
         let mut vec = Vec::new();
 
         vec.push(FormattedTodo::of(
@@ -616,18 +616,18 @@ fn date_eq(date1: &NaiveDate, date2: &NaiveDate) -> bool {
 
 fn parse_selection(string: &String) -> Vec<u64> {
     let mut vec = Vec::new();
-    for obj in string.replace(",", " ").split_whitespace() {
+    for obj in string.replace(',', " ").split_whitespace() {
         if let Ok(num) = obj.parse::<u64>() {
             if !vec.contains(&num) {
                 vec.push(num);
             }
-        } else if obj.contains("-") {
+        } else if obj.contains('-') {
             let mut n1 = 0;
             let mut n2 = 0;
 
             {
                 let mut index = 0;
-                for obj2 in obj.replace("-", " ").split_whitespace() {
+                for obj2 in obj.replace('-', " ").split_whitespace() {
                     if let Ok(num2) = obj2.parse::<u64>() {
                         if index == 0 {
                             n1 = num2;
