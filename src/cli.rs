@@ -7,7 +7,10 @@ use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike};
 use clap::{arg, Arg, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
 
-use crate::base::{self, Todo, TodoInstance};
+use crate::{
+    base::{self, Todo, TodoInstance},
+    get_version,
+};
 
 pub fn execute() {
     match cli().get_matches().subcommand() {
@@ -98,13 +101,16 @@ pub fn execute() {
             cache.clean();
             cache.write();
         }
-        _ => unreachable!(),
+        _ => println!("Command don't exist!"),
     }
 }
 
 fn cli() -> Command {
-    Command::new("todo")
-        .about("A powerful to-do manager in CLI")
+    Command::new("tuffous")
+        .about(format!(
+            "A powerful to-do manager in CLI. version {}",
+            get_version()
+        ))
         .subcommand_required(false)
         .arg_required_else_help(true)
         .allow_external_subcommands(true)
@@ -200,12 +206,16 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
     if let Some(n) = matches.get_one::<String>("ddl") {
         if let Some(t) = parse_date_and_time(n) {
             todo.deadline = Option::Some(t);
+        } else {
+            todo.deadline = Option::None;
         }
     }
 
     if let Some(n) = matches.get_one::<String>("date") {
         if let Some(d) = parse_date(n) {
             todo.time = Option::Some(d);
+        } else {
+            todo.deadline = Option::None;
         }
     }
 
