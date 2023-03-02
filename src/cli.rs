@@ -60,9 +60,8 @@ pub fn execute() {
             scanner.instance.read_all();
             scanner.instance.refresh();
             scanner.apply_filters(matches);
-            for todo_id in scanner.list(true) {
+            if let Some(todo_id) = scanner.list(true).into_iter().next() {
                 cache.father = Option::Some(todo_id);
-                break;
             }
             cache.process(&mut scanner.instance);
             cache.write();
@@ -232,7 +231,7 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
     }
 }
 
-fn parse_date_and_time(string: &String) -> Option<NaiveDateTime> {
+fn parse_date_and_time(string: &str) -> Option<NaiveDateTime> {
     let temp_str = string.replace('/', "-");
     let now = Local::now();
 
@@ -256,7 +255,7 @@ fn parse_date_and_time(string: &String) -> Option<NaiveDateTime> {
     Option::None
 }
 
-fn parse_date(string: &String) -> Option<NaiveDate> {
+fn parse_date(string: &str) -> Option<NaiveDate> {
     let temp_str = string.replace('/', "-");
     let now = Local::now();
 
@@ -614,7 +613,7 @@ fn date_eq(date1: &NaiveDate, date2: &NaiveDate) -> bool {
     date1.year() == date2.year() && date1.month() == date2.month() && date1.day() == date2.day()
 }
 
-fn parse_selection(string: &String) -> Vec<u64> {
+fn parse_selection(string: &str) -> Vec<u64> {
     let mut vec = Vec::new();
     for obj in string.replace(',', " ").split_whitespace() {
         if let Ok(num) = obj.parse::<u64>() {
@@ -681,7 +680,7 @@ struct TodoCache {
 
 impl TodoCache {
     pub fn create() -> Self {
-        if let Ok(mut f) = File::open("./.todo/cache.json") {
+        if let Ok(mut f) = File::open("./.tuffous/cache.json") {
             let mut str = String::new();
             f.read_to_string(&mut str).unwrap();
             serde_json::from_str::<TodoCache>(&str).unwrap()
@@ -694,7 +693,7 @@ impl TodoCache {
     }
 
     pub fn write(&self) {
-        File::create("./.todo/cache.json")
+        File::create("./.tuffous/cache.json")
             .unwrap()
             .write(serde_json::to_string(self).unwrap().as_bytes())
             .unwrap();

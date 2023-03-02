@@ -10,8 +10,8 @@ use chrono::{Local, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub fn init_repo(path: &str) {
-    create_path(&format!("{path}/.todo"));
-    create_path(&format!("{path}/.todo/todos"));
+    create_path(&format!("{path}/.tuffous"));
+    create_path(&format!("{path}/.tuffous/todos"));
 }
 
 fn create_path(path: &str) {
@@ -74,7 +74,7 @@ impl Todo {
     }
 
     pub fn write_to_file(&self, path: &str) {
-        let p = format!("{path}/.todo/todos/{}.json", self.get_id());
+        let p = format!("{path}/.tuffous/todos/{}.json", self.get_id());
 
         let Ok(mut file) = File::create(p) else { return };
         file.write(serde_json::to_string(self).unwrap().as_bytes())
@@ -90,7 +90,7 @@ impl Todo {
         };
 
         let mut str = String::new();
-        if let Err(_) = file.read_to_string(&mut str) {
+        if file.read_to_string(&mut str).is_err() {
             return Option::None;
         };
 
@@ -153,9 +153,9 @@ impl TodoInstance {
     }
 
     pub fn read_all(&mut self) {
-        for f in fs::read_dir(format!("{}/.todo/todos", self.path)).unwrap() {
-            if let Ok(_) = f {
-                if let Some(x) = Todo::read_from_file(f.unwrap().path()) {
+        for f in fs::read_dir(format!("{}/.tuffous/todos", self.path)).unwrap() {
+            if let Ok(fo) = f {
+                if let Some(x) = Todo::read_from_file(fo.path()) {
                     self.todos.push(x)
                 } else {
                     continue;
@@ -177,12 +177,7 @@ impl TodoInstance {
     }
 
     pub fn get_mut(&mut self, id: &u64) -> Option<&mut Todo> {
-        for todo in &mut self.todos {
-            if todo.get_id().eq(id) {
-                return Option::Some(todo);
-            }
-        }
-        Option::None
+        self.todos.iter_mut().find(|todo| todo.get_id().eq(id))
     }
 
     pub fn get_todos(&self) -> Vec<u64> {
@@ -310,7 +305,7 @@ impl TodoInstance {
             self.todos.remove(rm);
         }
         self.refresh();
-        fs::remove_file(format!("{}/.todo/todos/{}.json", self.path, id)).unwrap();
+        fs::remove_file(format!("{}/.tuffous/todos/{}.json", self.path, id)).unwrap();
     }
 
     pub fn get_weight(&self, id: &u64, completed: bool) -> u32 {
