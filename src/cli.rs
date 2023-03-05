@@ -153,6 +153,7 @@ fn cli() -> Command {
                 .args(filter_args()),
         )
         .subcommand(Command::new("cleancache").about("Clean cache"))
+        .subcommand(Command::new("gui").about("Open a GUI for this application (WIP)"))
 }
 
 fn edit_args() -> Vec<Arg> {
