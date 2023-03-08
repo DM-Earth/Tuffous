@@ -3,13 +3,14 @@ use std::{
     io::{Read, Write},
 };
 
-use chrono::{Datelike, Local, NaiveDate, NaiveDateTime, Timelike};
+use chrono::{Datelike, Local, NaiveDate, Timelike};
 use clap::{arg, Arg, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     base::{self, Todo, TodoInstance},
     get_version, gui,
+    util::{parse_date, parse_date_and_time},
 };
 
 pub fn execute() {
@@ -243,50 +244,6 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
             }
         }
     }
-}
-
-fn parse_date_and_time(string: &str) -> Option<NaiveDateTime> {
-    let temp_str = string.replace('/', "-");
-    let now = Local::now();
-
-    for variant in vec![
-        format!("{}-{}", now.year(), temp_str),
-        format!("{}-{}-00:00:00", now.year(), temp_str),
-        format!("{}-{}:00", now.year(), temp_str),
-        format!("{}", temp_str),
-        format!("{}-00:00:00", temp_str),
-        format!("{}:00", temp_str),
-    ] {
-        if let Ok(r) = NaiveDateTime::parse_from_str(&variant, "%Y-%m-%d-%H:%M:%S") {
-            return Option::Some(r);
-        }
-    }
-
-    if string.to_lowercase().contains("now") {
-        return Option::Some(Local::now().naive_local());
-    }
-
-    Option::None
-}
-
-fn parse_date(string: &str) -> Option<NaiveDate> {
-    let temp_str = string.replace('/', "-");
-    let now = Local::now();
-
-    for variant in vec![
-        format!("{}-{}", now.year(), temp_str),
-        format!("{}", temp_str),
-    ] {
-        if let Ok(r) = NaiveDate::parse_from_str(&variant, "%Y-%m-%d") {
-            return Option::Some(r);
-        }
-    }
-
-    if string.to_lowercase().contains("today") {
-        return Option::Some(Local::now().date_naive());
-    }
-
-    Option::None
 }
 
 struct TodoScanner {

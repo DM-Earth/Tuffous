@@ -1,7 +1,7 @@
-use chrono::Local;
+use chrono::{Datelike, Local};
 use iced::{
     executor, theme,
-    widget::{button, checkbox, column, horizontal_space, row},
+    widget::{button, checkbox, column, horizontal_space, row, text},
     window, Application, Color, Element, Renderer, Settings, Theme,
 };
 
@@ -121,7 +121,7 @@ impl Application for TodoApplication {
             }
             vec
         })
-        .spacing(15)
+        .spacing(7.5)
         .into();
 
         todo_views
@@ -179,34 +179,79 @@ impl TodoState {
     ) -> Vec<(u16, Vec<Element<'_, Message, Renderer>>)> {
         let todo = app.instance.get(&self.id).unwrap();
         let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-        if app.instance.get_children_once(&self.id).is_empty() {
-            self_vec.push(horizontal_space(20).into());
-        } else {
-            self_vec.push(
-                button(icons::icon(if self.expanded { '' } else { '' }))
-                    // .width(20)
-                    .style(theme::Button::Text)
-                    // .height(10)
-                    .on_press(Message::TodoMessage(
-                        self.id.to_owned(),
-                        TodoMessage::ExpandToggle,
-                    ))
-                    .into(),
-            );
-        }
-        self_vec.push(
-            checkbox(&todo.metadata.name, todo.completed, |x| {
-                Message::TodoMessage(self.id.to_owned(), TodoMessage::Complete(x))
-            })
-            .into(),
-        );
-        if let Some(time) = &todo.time {
-            if time.eq(&Local::now().date_naive()) {
-                self_vec.push(horizontal_space(5).into());
+        if !self.editing {
+            if app.instance.get_children_once(&self.id).is_empty() {
+                self_vec.push(horizontal_space(20).into());
+            } else {
                 self_vec.push(
-                    icons::icon('')
-                        .style(theme::Text::Color(Color::from_rgb(1.0, 0.84, 0.0)))
+                    button(icons::icon(if self.expanded { '' } else { '' }))
+                        .width(20)
+                        .style(theme::Button::Text)
+                        .on_press(Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::ExpandToggle,
+                        ))
                         .into(),
+                );
+                self_vec.push(horizontal_space(5).into());
+            }
+            self_vec.push(
+                checkbox("", todo.completed, |x| {
+                    Message::TodoMessage(self.id.to_owned(), TodoMessage::Complete(x))
+                })
+                .size(17.5)
+                .into(),
+            );
+            self_vec.push(text(&todo.metadata.name).into());
+            if let Some(time) = &todo.time {
+                self_vec.push(horizontal_space(7.5).into());
+                if time.eq(&Local::now().date_naive()) {
+                    self_vec.push(
+                        icons::icon('')
+                            .style(theme::Text::Color(Color::from_rgb(1.0, 0.84, 0.0)))
+                            .into(),
+                    );
+                } else {
+                    self_vec.push(
+                        text(format!(
+                            "{}{} {}",
+                            if time.year() == Local::now().year() {
+                                String::from("")
+                            } else {
+                                format!("{} ", time.year())
+                            },
+                            util::get_month_str(time.month()),
+                            time.day()
+                        ))
+                        .size(18.5)
+                        .style(theme::Text::Color(Color::from_rgb(0.45, 0.45, 0.45)))
+                        .into(),
+                    );
+                }
+            }
+            if let Some(ddl) = &todo.deadline {
+                self_vec.push(horizontal_space(50).into());
+                self_vec.push(
+                    icons::icon(if ddl > &Local::now().naive_local() {
+                        '󰈽'
+                    } else {
+                        '󰈻'
+                    })
+                    .style(theme::Text::Color(Color::from_rgb(0.9, 0.0, 0.0)))
+                    .into(),
+                );
+                self_vec.push(
+                    text(format!(
+                        " {} {}",
+                        if ddl.date().eq(&Local::now().date_naive()) {
+                            String::from("Today")
+                        } else {
+                            format!("{} {}", util::get_month_str(ddl.month()), ddl.day())
+                        },
+                        ddl.time().format("%H:%M")
+                    ))
+                    .style(theme::Text::Color(Color::from_rgb(0.9, 0.0, 0.0)))
+                    .into(),
                 );
             }
         }
