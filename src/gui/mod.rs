@@ -1,2 +1,2 @@
 pub mod main;
-pub mod icons;
+pub(self) mod appearance;

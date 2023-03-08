@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, Local, NaiveDate, Datelike};
+use chrono::{Datelike, Local, NaiveDate, NaiveDateTime};
 
 pub fn remove_from_vec<T: PartialEq>(vec: &mut Vec<T>, instance: &T) {
     remove_from_vec_if(vec, &|x: &T| x.eq(instance))
@@ -108,4 +108,12 @@ pub fn parse_date(string: &str) -> Option<NaiveDate> {
     }
 
     Option::None
+}
+
+pub fn join_str_with(vec: &Vec<String>, with: &str) -> String {
+    let mut string = String::new();
+    for str_temp in vec {
+        string = format!("{string}{with}{str_temp}")
+    }
+    string
 }
