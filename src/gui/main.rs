@@ -260,17 +260,19 @@ impl TodoState {
             .into(),
         );
         if !self.editing {
-            self_vec.push(text(&todo.metadata.name).into());
+            let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+            let mut row_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+            row_vec.push(text(&todo.metadata.name).size(20).into());
             if let Some(time) = &todo.time {
-                self_vec.push(horizontal_space(7.5).into());
+                row_vec.push(horizontal_space(7.5).into());
                 if time.eq(&Local::now().date_naive()) {
-                    self_vec.push(
+                    row_vec.push(
                         icons::icon('')
                             .style(theme::Text::Color(Color::from_rgb(1.0, 0.84, 0.0)))
                             .into(),
                     );
                 } else {
-                    self_vec.push(
+                    row_vec.push(
                         text(format!(
                             "{}{} {}",
                             if time.year() == Local::now().year() {
@@ -289,8 +291,8 @@ impl TodoState {
             }
 
             if let Some(ddl) = &todo.deadline {
-                self_vec.push(horizontal_space(50).into());
-                self_vec.push(
+                row_vec.push(horizontal_space(50).into());
+                row_vec.push(
                     icons::icon(if ddl > &Local::now().naive_local() {
                         '󰈽'
                     } else {
@@ -299,7 +301,7 @@ impl TodoState {
                     .style(theme::Text::Color(Color::from_rgb(0.9, 0.0, 0.0)))
                     .into(),
                 );
-                self_vec.push(
+                row_vec.push(
                     text(format!(
                         " {} {}",
                         if ddl.date().eq(&Local::now().date_naive()) {
@@ -313,6 +315,18 @@ impl TodoState {
                     .into(),
                 );
             }
+
+            col_vec.push(row(row_vec).into());
+            if !todo.metadata.details.is_empty() {
+                col_vec.push(
+                    text(todo.metadata.details.to_owned())
+                        .size(17.5)
+                        .style(theme::Text::Color(Color::from_rgb(0.25, 0.25, 0.25)))
+                        .width(350)
+                        .into(),
+                );
+            }
+            self_vec.push(column(col_vec).into());
         } else {
             let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
 
@@ -370,13 +384,16 @@ impl TodoState {
 
         self_vec.push(horizontal_space(15).into());
         self_vec.push(
-            button(icons::icon('󰏫'))
-                .style(theme::Button::Text)
-                .on_press(Message::TodoMessage(
-                    self.id.to_owned(),
-                    TodoMessage::Edit(EditMessage::ToggleEdit),
-                ))
-                .into(),
+            button(
+                icons::icon(if self.editing { '󰸞' } else { '󰏫' })
+                    .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
+            )
+            .style(theme::Button::Text)
+            .on_press(Message::TodoMessage(
+                self.id.to_owned(),
+                TodoMessage::Edit(EditMessage::ToggleEdit),
+            ))
+            .into(),
         );
 
         let mut vec: Vec<(u16, Vec<Element<'_, Message, Renderer>>)> = Vec::new();
