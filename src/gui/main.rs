@@ -1,7 +1,7 @@
 use chrono::{Datelike, Local};
 use iced::{
     executor, theme,
-    widget::{button, checkbox, column, horizontal_space, row, text},
+    widget::{button, checkbox, column, horizontal_space, row, text, text_input},
     window, Application, Color, Element, Renderer, Settings, Theme,
 };
 
@@ -85,8 +85,53 @@ impl Application for TodoApplication {
         self.instance.refresh();
         match message {
             Message::TodoMessage(id, msg) => match msg {
-                TodoMessage::Complete(c) => self.instance.get_mut(&id).unwrap().completed = c,
-                TodoMessage::Edit(_) => todo!(),
+                TodoMessage::ToggleComplete => {
+                    let mut todo = self.instance.get_mut(&id).unwrap();
+                    todo.completed = !todo.completed;
+                }
+                TodoMessage::Edit(edit_msg) => match edit_msg {
+                    EditMessage::Name(name) => {
+                        self.instance.get_mut(&id).unwrap().metadata.name = name
+                    }
+                    EditMessage::Details(details) => {
+                        self.instance.get_mut(&id).unwrap().metadata.details = details
+                    }
+                    EditMessage::ToggleEdit => {
+                        let todo = self.instance.get(&id).unwrap();
+                        let time_o = todo.time.clone();
+                        let ddl_o = todo.deadline.clone();
+                        let mut state = self.get_state_mut(&id).unwrap();
+                        state.editing = !state.editing;
+                        if state.editing {
+                            if let Some(time) = time_o {
+                                state.time_cache = time.format("%Y/%m/%d").to_string();
+                            }
+
+                            if let Some(ddl) = ddl_o {
+                                state.ddl_cache = ddl.format("%Y/%m/%d-%H:%M:%S").to_string();
+                            }
+                        } else {
+                            state.time_cache = String::new();
+                            state.ddl_cache = String::new();
+                        }
+                    }
+                    EditMessage::Date(date) => {
+                        if let Some(date_r) = util::parse_date(&date) {
+                            self.instance.get_mut(&id).unwrap().time = Option::Some(date_r);
+                        } else {
+                            self.instance.get_mut(&id).unwrap().time = Option::None;
+                        }
+                        self.get_state_mut(&id).unwrap().time_cache = date;
+                    }
+                    EditMessage::Deadline(ddl) => {
+                        if let Some(ddl_r) = util::parse_date_and_time(&ddl) {
+                            self.instance.get_mut(&id).unwrap().deadline = Option::Some(ddl_r);
+                        } else {
+                            self.instance.get_mut(&id).unwrap().deadline = Option::None;
+                        }
+                        self.get_state_mut(&id).unwrap().ddl_cache = ddl;
+                    }
+                },
                 TodoMessage::ExpandToggle => {
                     let state = self.get_state_mut(&id).unwrap();
                     state.expanded = !state.expanded;
@@ -147,21 +192,26 @@ enum Message {
 
 #[derive(Debug, Clone)]
 enum TodoMessage {
-    Complete(bool),
+    ToggleComplete,
     Edit(EditMessage),
     ExpandToggle,
 }
 
 #[derive(Debug, Clone)]
 enum EditMessage {
-    Edit,
-    EndEdit,
+    Name(String),
+    Details(String),
+    Date(String),
+    Deadline(String),
+    ToggleEdit,
 }
 
 struct TodoState {
     pub id: u64,
     pub editing: bool,
     pub expanded: bool,
+    pub time_cache: String,
+    pub ddl_cache: String,
 }
 
 impl TodoState {
@@ -170,6 +220,8 @@ impl TodoState {
             id: *todo.get_id(),
             editing: false,
             expanded: true,
+            time_cache: String::new(),
+            ddl_cache: String::new(),
         }
     }
 
@@ -179,29 +231,35 @@ impl TodoState {
     ) -> Vec<(u16, Vec<Element<'_, Message, Renderer>>)> {
         let todo = app.instance.get(&self.id).unwrap();
         let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-        if !self.editing {
-            if app.instance.get_children_once(&self.id).is_empty() {
-                self_vec.push(horizontal_space(20).into());
-            } else {
-                self_vec.push(
-                    button(icons::icon(if self.expanded { '' } else { '' }))
-                        .width(20)
-                        .style(theme::Button::Text)
-                        .on_press(Message::TodoMessage(
-                            self.id.to_owned(),
-                            TodoMessage::ExpandToggle,
-                        ))
-                        .into(),
-                );
-                self_vec.push(horizontal_space(5).into());
-            }
+        if app.instance.get_children_once(&self.id).is_empty() {
+            self_vec.push(horizontal_space(20).into());
+        } else {
             self_vec.push(
-                checkbox("", todo.completed, |x| {
-                    Message::TodoMessage(self.id.to_owned(), TodoMessage::Complete(x))
-                })
-                .size(17.5)
-                .into(),
+                button(icons::icon(if self.expanded { '' } else { '' }))
+                    .width(20)
+                    .style(theme::Button::Text)
+                    .on_press(Message::TodoMessage(
+                        self.id.to_owned(),
+                        TodoMessage::ExpandToggle,
+                    ))
+                    .into(),
             );
+            self_vec.push(horizontal_space(5).into());
+        }
+
+        self_vec.push(
+            button(
+                icons::icon(if todo.completed { '󰄲' } else { '󰄱' })
+                    .style(theme::Text::Color(Color::from_rgb(0.0, 0.0, 0.8))),
+            )
+            .on_press(Message::TodoMessage(
+                self.id.to_owned(),
+                TodoMessage::ToggleComplete,
+            ))
+            .style(theme::Button::Text)
+            .into(),
+        );
+        if !self.editing {
             self_vec.push(text(&todo.metadata.name).into());
             if let Some(time) = &todo.time {
                 self_vec.push(horizontal_space(7.5).into());
@@ -229,6 +287,7 @@ impl TodoState {
                     );
                 }
             }
+
             if let Some(ddl) = &todo.deadline {
                 self_vec.push(horizontal_space(50).into());
                 self_vec.push(
@@ -254,7 +313,71 @@ impl TodoState {
                     .into(),
                 );
             }
+        } else {
+            let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+
+            col_vec.push(
+                row!(
+                    icons::icon('󰑕'),
+                    text_input("Input title here", &todo.metadata.name, |input| {
+                        Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Edit(EditMessage::Name(input)),
+                        )
+                    })
+                )
+                .into(),
+            );
+            col_vec.push(
+                row!(
+                    icons::icon('󰟃'),
+                    text_input("Input details here", &todo.metadata.details, |input| {
+                        Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Edit(EditMessage::Details(input)),
+                        )
+                    })
+                )
+                .into(),
+            );
+            col_vec.push(
+                row!(
+                    icons::icon('󰃯'),
+                    text_input("Input date here", &self.time_cache, |input| {
+                        Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Edit(EditMessage::Date(input)),
+                        )
+                    })
+                )
+                .into(),
+            );
+            col_vec.push(
+                row!(
+                    icons::icon('󰈼'),
+                    text_input("Input deadline here", &self.ddl_cache, |input| {
+                        Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Edit(EditMessage::Deadline(input)),
+                        )
+                    })
+                )
+                .into(),
+            );
+
+            self_vec.push(column(col_vec).width(350).into());
         }
+
+        self_vec.push(horizontal_space(15).into());
+        self_vec.push(
+            button(icons::icon('󰏫'))
+                .style(theme::Button::Text)
+                .on_press(Message::TodoMessage(
+                    self.id.to_owned(),
+                    TodoMessage::Edit(EditMessage::ToggleEdit),
+                ))
+                .into(),
+        );
 
         let mut vec: Vec<(u16, Vec<Element<'_, Message, Renderer>>)> = Vec::new();
         vec.push((0, self_vec));
