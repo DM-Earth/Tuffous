@@ -1,13 +1,16 @@
+use chrono::Local;
 use iced::{
-    executor,
-    widget::{checkbox, column, row},
-    window, Application, Element, Settings, Theme,
+    executor, theme,
+    widget::{button, checkbox, column, horizontal_space, row, text},
+    window, Application, Color, Element, Renderer, Settings, Theme,
 };
 
 use crate::{
     base::{Todo, TodoInstance},
     util,
 };
+
+use super::icons;
 
 struct TodoApplication {
     pub instance: TodoInstance,
@@ -89,10 +92,15 @@ impl Application for TodoApplication {
     }
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
+        self.instance.refresh();
         match message {
             Message::TodoMessage(id, msg) => match msg {
                 TodoMessage::Complete(c) => self.instance.get_mut(&id).unwrap().completed = c,
                 TodoMessage::Edit(_) => todo!(),
+                TodoMessage::ExpandToggle => {
+                    let state = self.get_state_mut(&id).unwrap();
+                    state.expanded = !state.expanded;
+                }
             },
         };
         self.instance.write_all();
@@ -109,13 +117,20 @@ impl Application for TodoApplication {
             ));
         }
 
-        let todo_views: Element<_> = column(
-            todos
-                .iter()
-                .enumerate()
-                .map(|(i, state)| state.1.get_view(state.0))
-                .collect(),
-        )
+        let todo_views: Element<_> = column({
+            let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+            for todo in &self.instance.todos {
+                if todo.dependents.is_empty() {
+                    for view in &mut self.get_state(todo.get_id()).unwrap().get_view(&self) {
+                        let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
+                        row_c.push(horizontal_space(view.0).into());
+                        row_c.append(&mut view.1);
+                        vec.push(row(row_c).into());
+                    }
+                }
+            }
+            vec
+        })
         .spacing(15)
         .into();
 
@@ -144,6 +159,7 @@ enum Message {
 enum TodoMessage {
     Complete(bool),
     Edit(EditMessage),
+    ExpandToggle,
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +171,7 @@ enum EditMessage {
 struct TodoState {
     pub id: u64,
     pub editing: bool,
+    pub expanded: bool,
 }
 
 impl TodoState {
@@ -162,14 +179,57 @@ impl TodoState {
         TodoState {
             id: *todo.get_id(),
             editing: false,
+            expanded: true,
         }
     }
 
-    pub fn get_view(&self, todo: &Todo) -> Element<Message> {
-        row![checkbox(&todo.metadata.name, todo.completed, |x| {
-            Message::TodoMessage(self.id.to_owned(), TodoMessage::Complete(x))
-        })]
-        .spacing(15)
-        .into()
+    pub fn get_view<'a>(
+        &'a self,
+        app: &'a TodoApplication,
+    ) -> Vec<(u16, Vec<Element<'_, Message, Renderer>>)> {
+        let todo = app.instance.get(&self.id).unwrap();
+        let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        if app.instance.get_children_once(&self.id).is_empty() {
+            self_vec.push(horizontal_space(20).into());
+        } else {
+            self_vec.push(
+                button(icons::icon(if self.expanded { '' } else { '' }))
+                    // .width(20)
+                    .style(theme::Button::Text)
+                    // .height(10)
+                    .on_press(Message::TodoMessage(
+                        self.id.to_owned(),
+                        TodoMessage::ExpandToggle,
+                    ))
+                    .into(),
+            );
+        }
+        self_vec.push(
+            checkbox(&todo.metadata.name, todo.completed, |x| {
+                Message::TodoMessage(self.id.to_owned(), TodoMessage::Complete(x))
+            })
+            .into(),
+        );
+        if let Some(time) = &todo.time {
+            if time.eq(&Local::now().date_naive()) {
+                self_vec.push(horizontal_space(5).into());
+                self_vec.push(
+                    icons::icon('')
+                        .style(theme::Text::Color(Color::from_rgb(1.0, 0.84, 0.0)))
+                        .into(),
+                );
+            }
+        }
+
+        let mut vec: Vec<(u16, Vec<Element<'_, Message, Renderer>>)> = Vec::new();
+        vec.push((0, self_vec));
+        if self.expanded {
+            for todo_id in app.instance.get_children_once(&self.id) {
+                for v in app.get_state(&todo_id).unwrap().get_view(app) {
+                    vec.push((v.0 + 25, v.1));
+                }
+            }
+        }
+        vec
     }
 }
