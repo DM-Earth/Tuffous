@@ -1,2 +1,2 @@
-pub mod gui;
+pub mod main;
 pub mod icons;

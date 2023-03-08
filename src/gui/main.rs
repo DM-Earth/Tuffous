@@ -1,7 +1,7 @@
 use chrono::Local;
 use iced::{
     executor, theme,
-    widget::{button, checkbox, column, horizontal_space, row, text},
+    widget::{button, checkbox, column, horizontal_space, row},
     window, Application, Color, Element, Renderer, Settings, Theme,
 };
 
@@ -29,21 +29,11 @@ pub fn run() -> iced::Result {
 
 impl TodoApplication {
     pub fn get_state(&self, id: &u64) -> Option<&TodoState> {
-        for state in &self.states {
-            if state.id.eq(id) {
-                return Option::Some(state);
-            }
-        }
-        Option::None
+        self.states.iter().find(|&state| state.id.eq(id))
     }
 
     pub fn get_state_mut(&mut self, id: &u64) -> Option<&mut TodoState> {
-        for state in &mut self.states {
-            if state.id.eq(id) {
-                return Option::Some(state);
-            }
-        }
-        Option::None
+        self.states.iter_mut().find(|state| state.id.eq(id))
     }
 
     pub fn refresh_states(&mut self) {
@@ -121,7 +111,7 @@ impl Application for TodoApplication {
             let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
             for todo in &self.instance.todos {
                 if todo.dependents.is_empty() {
-                    for view in &mut self.get_state(todo.get_id()).unwrap().get_view(&self) {
+                    for view in &mut self.get_state(todo.get_id()).unwrap().get_view(self) {
                         let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
                         row_c.push(horizontal_space(view.0).into());
                         row_c.append(&mut view.1);

@@ -102,7 +102,7 @@ pub fn execute() {
             cache.write();
         }
         Some(("gui", _)) => {
-            gui::gui::run().unwrap();
+            gui::main::run().unwrap();
         }
         _ => println!("Command don't exist!"),
     }
