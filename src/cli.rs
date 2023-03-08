@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     base::{self, Todo, TodoInstance},
-    get_version,
+    get_version, gui,
 };
 
 pub fn execute() {
@@ -100,6 +100,9 @@ pub fn execute() {
             let mut cache = TodoCache::create();
             cache.clean();
             cache.write();
+        }
+        Some(("gui", _)) => {
+            gui::run().unwrap();
         }
         _ => println!("Command don't exist!"),
     }
