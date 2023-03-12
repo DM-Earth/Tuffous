@@ -1,8 +1,8 @@
 use chrono::{Datelike, Local};
 use iced::{
-    executor, theme,
+    alignment, executor, theme,
     widget::{button, column, container, horizontal_space, row, text, text_input},
-    window, Application, Color, Element, Renderer, Settings, Theme,
+    window, Application, Color, Element, Length, Renderer, Settings, Theme,
 };
 
 use crate::{
@@ -20,9 +20,11 @@ struct TodoApplication {
 pub fn run() -> iced::Result {
     TodoApplication::run(Settings {
         window: window::Settings {
-            size: (500, 800),
+            size: (650, 800),
+            min_size: Option::Some((500, 650)),
             ..window::Settings::default()
         },
+        default_font: Some(appearance::NOTO_SANS),
         ..Settings::default()
     })
 }
@@ -97,22 +99,33 @@ impl Application for TodoApplication {
                         self.instance.get_mut(&id).unwrap().metadata.details = details
                     }
                     EditMessage::ToggleEdit => {
-                        let todo = self.instance.get(&id).unwrap();
-                        let time_o = todo.time.clone();
-                        let ddl_o = todo.deadline.clone();
-                        let mut state = self.get_state_mut(&id).unwrap();
-                        state.editing = !state.editing;
-                        if state.editing {
-                            if let Some(time) = time_o {
-                                state.time_cache = time.format("%Y/%m/%d").to_string();
-                            }
+                        {
+                            let todo = self.instance.get(&id).unwrap();
+                            let time_o = todo.time.clone();
+                            let ddl_o = todo.deadline.clone();
+                            let mut state = self.get_state_mut(&id).unwrap();
+                            state.editing = !state.editing;
+                            if state.editing {
+                                if let Some(time) = time_o {
+                                    state.time_cache = time.format("%Y/%m/%d").to_string();
+                                }
 
-                            if let Some(ddl) = ddl_o {
-                                state.ddl_cache = ddl.format("%Y/%m/%d-%H:%M:%S").to_string();
+                                if let Some(ddl) = ddl_o {
+                                    state.ddl_cache = ddl.format("%Y/%m/%d-%H:%M:%S").to_string();
+                                }
+                            } else {
+                                state.time_cache = String::new();
+                                state.ddl_cache = String::new();
                             }
-                        } else {
-                            state.time_cache = String::new();
-                            state.ddl_cache = String::new();
+                        }
+
+                        {
+                            if !self.get_state(&id).unwrap().editing {
+                                let mut todo = self.instance.get_mut(&id).unwrap();
+                                if todo.metadata.name.is_empty() {
+                                    todo.metadata.name = String::from("untitled todo");
+                                }
+                            }
                         }
                     }
                     EditMessage::Date(date) => {
@@ -167,7 +180,12 @@ impl Application for TodoApplication {
                         let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
                         row_c.push(horizontal_space(view.0).into());
                         row_c.append(&mut view.1);
-                        vec.push(row(row_c).into());
+                        vec.push(
+                            container(container(row(row_c)).max_width(750))
+                                .align_x(alignment::Horizontal::Center)
+                                .width(Length::Fill)
+                                .into(),
+                        );
                     }
                 }
             }
@@ -242,7 +260,7 @@ impl TodoState {
         let todo = app.instance.get(&self.id).unwrap();
         let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
         if app.instance.get_children_once(&self.id).is_empty() {
-            self_vec.push(horizontal_space(height).into());
+            self_vec.push(horizontal_space(25).into());
         } else {
             self_vec.push(
                 container(
@@ -278,12 +296,13 @@ impl TodoState {
             .center_y()
             .into(),
         );
-        if !self.editing {
-            let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-            let mut row_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
 
+        let mut left_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        let mut right_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+
+        if !self.editing {
             if let Some(time) = &todo.time {
-                row_vec.push(
+                left_vec.push(
                     container(if time.eq(&Local::now().date_naive()) {
                         appearance::icon('')
                             .style(theme::Text::Color(Color::from_rgb(1.0, 0.84, 0.0)))
@@ -299,7 +318,6 @@ impl TodoState {
                             time.day()
                         ))
                         .size(18.5)
-                        //.style(theme::Text::Color(Color::from_rgb(0.45, 0.45, 0.45)))
                     })
                     .style(if time.eq(&Local::now().date_naive()) {
                         theme::Container::Transparent
@@ -310,21 +328,29 @@ impl TodoState {
                     .center_y()
                     .into(),
                 );
-                row_vec.push(horizontal_space(7.5).into());
+                left_vec.push(horizontal_space(3.5).into());
             }
 
-            row_vec.push(
-                container(text(&todo.metadata.name).size(25))
-                    .height(height)
-                    .center_y()
-                    .into(),
+            left_vec.push(
+                container(
+                    button(text(&todo.metadata.name))
+                        .style(theme::Button::Text)
+                        .on_press(Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Edit(EditMessage::ToggleEdit),
+                        ))
+                        .height(Length::Fill),
+                )
+                .height(height)
+                .center_y()
+                .into(),
             );
 
             if !todo.tags.is_empty() {
-                row_vec.push(horizontal_space(3.5).into());
+                left_vec.push(horizontal_space(3.5).into());
                 for tag in &todo.tags {
-                    row_vec.push(horizontal_space(5).into());
-                    row_vec.push(
+                    left_vec.push(horizontal_space(5).into());
+                    left_vec.push(
                         container(
                             container(text(format!("  {}  ", tag)).size(17.5))
                                 .style(theme::Container::Custom(Box::new(appearance::TagStyle {})))
@@ -339,24 +365,10 @@ impl TodoState {
             }
 
             if let Some(ddl) = &todo.deadline {
-                row_vec.push(horizontal_space(50).into());
-                row_vec.push(
-                    container(
-                        appearance::icon(if ddl > &Local::now().naive_local() {
-                            '󰈽'
-                        } else {
-                            '󰈻'
-                        })
-                        .style(theme::Text::Color(Color::from_rgb(0.9, 0.0, 0.0))),
-                    )
-                    .height(height)
-                    .center_y()
-                    .into(),
-                );
-                row_vec.push(
+                right_vec.push(
                     container(
                         text(format!(
-                            " {} {}",
+                            "{} {} ",
                             if ddl.date().eq(&Local::now().date_naive()) {
                                 String::from("Today")
                             } else {
@@ -370,110 +382,166 @@ impl TodoState {
                     .center_y()
                     .into(),
                 );
-            }
-
-            col_vec.push(row(row_vec).into());
-            if !todo.metadata.details.is_empty() {
-                col_vec.push(
-                    text(todo.metadata.details.to_owned())
-                        .size(17.5)
-                        .style(theme::Text::Color(Color::from_rgb(0.25, 0.25, 0.25)))
-                        .width(350)
-                        .into(),
+                right_vec.push(
+                    container(
+                        appearance::icon(if ddl > &Local::now().naive_local() {
+                            '󰈻'
+                        } else {
+                            '󰮛'
+                        })
+                        .style(theme::Text::Color(Color::from_rgb(0.9, 0.0, 0.0))),
+                    )
+                    .height(height)
+                    .center_y()
+                    .into(),
                 );
             }
-            self_vec.push(column(col_vec).into());
         } else {
             let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
 
             col_vec.push(
                 row!(
-                    appearance::icon('󰑕'),
-                    text_input("Input title here", &todo.metadata.name, |input| {
-                        Message::TodoMessage(
-                            self.id.to_owned(),
-                            TodoMessage::Edit(EditMessage::Name(input)),
-                        )
-                    })
-                )
-                .into(),
-            );
-            col_vec.push(
-                row!(
-                    appearance::icon('󰟃'),
-                    text_input("Input details here", &todo.metadata.details, |input| {
-                        Message::TodoMessage(
-                            self.id.to_owned(),
-                            TodoMessage::Edit(EditMessage::Details(input)),
-                        )
-                    })
-                )
-                .into(),
-            );
-            col_vec.push(
-                row!(
-                    appearance::icon('󰃯'),
-                    text_input("Input date here", &self.time_cache, |input| {
-                        Message::TodoMessage(
-                            self.id.to_owned(),
-                            TodoMessage::Edit(EditMessage::Date(input)),
-                        )
-                    })
-                )
-                .into(),
-            );
-            col_vec.push(
-                row!(
-                    appearance::icon('󰈼'),
-                    text_input("Input deadline here", &self.ddl_cache, |input| {
-                        Message::TodoMessage(
-                            self.id.to_owned(),
-                            TodoMessage::Edit(EditMessage::Deadline(input)),
-                        )
-                    })
-                )
-                .into(),
-            );
-            col_vec.push(
-                row!(
-                    appearance::icon('󰓻'),
-                    text_input(
-                        "Separate tags by space",
-                        &format!("{} ", util::join_str_with(&todo.tags, " ")),
-                        |input| {
+                    container(appearance::icon('󰑕')).height(height).center_y(),
+                    container(
+                        text_input("Input title here", &todo.metadata.name, |input| {
                             Message::TodoMessage(
                                 self.id.to_owned(),
-                                TodoMessage::Edit(EditMessage::Tags(input)),
+                                TodoMessage::Edit(EditMessage::Name(input)),
                             )
-                        }
+                        })
+                        .width(350)
                     )
+                    .height(height)
+                    .center_y()
+                )
+                .into(),
+            );
+            col_vec.push(
+                row!(
+                    container(appearance::icon('󰟃')).height(height).center_y(),
+                    container(
+                        text_input("Input details here", &todo.metadata.details, |input| {
+                            Message::TodoMessage(
+                                self.id.to_owned(),
+                                TodoMessage::Edit(EditMessage::Details(input)),
+                            )
+                        })
+                        .width(350)
+                    )
+                    .height(height)
+                    .center_y()
+                )
+                .into(),
+            );
+            col_vec.push(
+                row!(
+                    container(appearance::icon('󰃯')).height(height).center_y(),
+                    container(
+                        text_input("Input date here", &self.time_cache, |input| {
+                            Message::TodoMessage(
+                                self.id.to_owned(),
+                                TodoMessage::Edit(EditMessage::Date(input)),
+                            )
+                        })
+                        .width(350)
+                    )
+                    .height(height)
+                    .center_y()
+                )
+                .into(),
+            );
+            col_vec.push(
+                row!(
+                    container(appearance::icon('󰈼')),
+                    container(
+                        text_input("Input deadline here", &self.ddl_cache, |input| {
+                            Message::TodoMessage(
+                                self.id.to_owned(),
+                                TodoMessage::Edit(EditMessage::Deadline(input)),
+                            )
+                        })
+                        .width(350)
+                    )
+                    .height(height)
+                    .center_y()
+                )
+                .into(),
+            );
+            col_vec.push(
+                row!(
+                    container(appearance::icon('󰓻')).height(height).center_y(),
+                    container(
+                        text_input(
+                            "Separate tags by space",
+                            &format!("{} ", util::join_str_with(&todo.tags, " ")),
+                            |input| {
+                                Message::TodoMessage(
+                                    self.id.to_owned(),
+                                    TodoMessage::Edit(EditMessage::Tags(input)),
+                                )
+                            }
+                        )
+                        .width(350)
+                    )
+                    .height(height)
+                    .center_y()
                 )
                 .into(),
             );
 
-            self_vec.push(column(col_vec).width(350).into());
+            self_vec.push(column(col_vec).into());
+
+            right_vec.push(horizontal_space(8.5).into());
+            right_vec.push(
+                container(
+                    button(
+                        appearance::icon('󰸞')
+                            .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
+                    )
+                    .style(theme::Button::Text)
+                    .on_press(Message::TodoMessage(
+                        self.id.to_owned(),
+                        TodoMessage::Edit(EditMessage::ToggleEdit),
+                    )),
+                )
+                .height(height)
+                .center_y()
+                .into(),
+            );
         }
 
-        self_vec.push(horizontal_space(7.5).into());
+        right_vec.push(horizontal_space(12).into());
+
         self_vec.push(
-            container(
-                button(
-                    appearance::icon(if self.editing { '󰸞' } else { '󰏫' })
-                        .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
-                )
-                .style(theme::Button::Text)
-                .on_press(Message::TodoMessage(
-                    self.id.to_owned(),
-                    TodoMessage::Edit(EditMessage::ToggleEdit),
-                )),
-            )
-            .height(height)
-            .center_y()
-            .into(),
+            container(row(left_vec))
+                .align_x(alignment::Horizontal::Left)
+                .width(Length::Fill)
+                .into(),
+        );
+        self_vec.push(
+            container(row(right_vec))
+                .align_x(alignment::Horizontal::Right)
+                .width(Length::Fill)
+                .into(),
         );
 
         let mut vec: Vec<(u16, Vec<Element<'_, Message, Renderer>>)> = Vec::new();
-        vec.push((0, self_vec));
+        vec.push((
+            12,
+            if self.editing {
+                self_vec
+            } else {
+                vec![column!(
+                    row(self_vec),
+                    row![
+                        horizontal_space(57.5),
+                        text(todo.metadata.details.clone())
+                            .style(theme::Text::Color(Color::from_rgb(0.35, 0.35, 0.35)))
+                    ]
+                )
+                .into()]
+            },
+        ));
         if self.expanded {
             for todo_id in app.instance.get_children_once(&self.id) {
                 for v in app.get_state(&todo_id).unwrap().get_view(app) {

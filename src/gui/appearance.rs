@@ -9,6 +9,8 @@ const ICONS: Font = Font::External {
     bytes: include_bytes!("../../fonts/nerd_font.ttf"),
 };
 
+pub const NOTO_SANS: &[u8; 556216] = include_bytes!("../../fonts/noto_sans.ttf");
+
 pub fn icon(unicode: char) -> Text<'static> {
     text(unicode.to_string())
         .font(ICONS)
