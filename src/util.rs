@@ -117,3 +117,27 @@ pub fn join_str_with(vec: &Vec<String>, with: &str) -> String {
     }
     string
 }
+
+pub fn get_progression_char(percent: u32) -> char {
+    if percent == 0 {
+        '󰝦'
+    } else if percent > 0 && percent <= 13 {
+        '󰪞'
+    } else if percent > 13 && percent <= 25 {
+        '󰪟'
+    } else if percent > 25 && percent <= 38 {
+        '󰪠'
+    } else if percent > 38 && percent <= 50 {
+        '󰪡'
+    } else if percent > 50 && percent <= 63 {
+        '󰪢'
+    } else if percent > 63 && percent <= 75 {
+        '󰪣'
+    } else if percent > 75 && percent <= 88 {
+        '󰪤'
+    } else if percent > 88 && percent <= 100 {
+        '󰪥'
+    } else {
+        unreachable!()
+    }
+}

@@ -326,7 +326,7 @@ impl TodoState {
         self_vec.push(
             container(
                 button(
-                    appearance::icon(if todo.completed { '󰄲' } else { '󰄱' })
+                    appearance::icon(self.get_completion_state_view(&app.instance))
                         .size(17.5)
                         .style(theme::Text::Color(Color::from_rgb(0.0, 0.0, 0.8))),
                 )
@@ -549,7 +549,11 @@ impl TodoState {
                     container(
                         text_input(
                             "Separate tags by space",
-                            &format!("{} ", util::join_str_with(&todo.tags, " ")),
+                            &(if todo.tags.is_empty() {
+                                String::new()
+                            } else {
+                                format!("{} ", util::join_str_with(&todo.tags, " "))
+                            }),
                             |input| {
                                 Message::TodoMessage(
                                     self.id.to_owned(),
@@ -668,5 +672,25 @@ impl TodoState {
             }
         }
         vec
+    }
+
+    pub fn get_completion_state_view(&self, instance: &TodoInstance) -> char {
+        let todo = instance.get(&self.id).unwrap();
+        if todo.completed {
+            if instance.get_children_once(&self.id).is_empty() {
+                '󰄲'
+            } else {
+                '󰗠'
+            }
+        } else {
+            if instance.get_children_once(&self.id).is_empty() {
+                '󰄱'
+            } else {
+                util::get_progression_char(
+                    (instance.get_weight(&self.id, true) * 100)
+                        / instance.get_weight(&self.id, false),
+                )
+            }
+        }
     }
 }
