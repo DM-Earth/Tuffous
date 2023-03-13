@@ -1,7 +1,7 @@
 use chrono::{Datelike, Local};
 use iced::{
     alignment, executor, theme,
-    widget::{button, column, container, horizontal_space, row, text, text_input},
+    widget::{button, column, container, horizontal_space, row, scrollable, text, text_input},
     window, Application, Color, Element, Length, Renderer, Settings, Theme,
 };
 
@@ -15,6 +15,7 @@ use super::appearance;
 struct TodoApplication {
     pub instance: TodoInstance,
     pub states: Vec<TodoState>,
+    pub dep_selection: Option<(u64, Vec<u64>)>,
 }
 
 pub fn run() -> iced::Result {
@@ -64,6 +65,7 @@ impl Application for TodoApplication {
         let mut app = TodoApplication {
             instance: TodoInstance::create(&flags.path),
             states: Vec::new(),
+            dep_selection: Option::None,
         };
         app.instance.read_all();
         app.instance.refresh();
@@ -116,6 +118,14 @@ impl Application for TodoApplication {
                             } else {
                                 state.time_cache = String::new();
                                 state.ddl_cache = String::new();
+                                self.dep_selection = Option::None;
+                            }
+                        }
+                        if self.get_state(&id).unwrap().editing {
+                            for state in &mut self.states {
+                                if !state.id.eq(&id) {
+                                    state.editing = false;
+                                }
                             }
                         }
 
@@ -151,10 +161,36 @@ impl Application for TodoApplication {
                             todo.tags.push(tag.to_string());
                         }
                     }
+                    EditMessage::ToggleSelectChildren => {
+                        if self.dep_selection.is_some() {
+                            self.dep_selection = Option::None;
+                        } else {
+                            self.dep_selection =
+                                Option::Some((id, self.instance.get_children_once(&id)));
+                        }
+                    }
                 },
                 TodoMessage::ExpandToggle => {
                     let state = self.get_state_mut(&id).unwrap();
                     state.expanded = !state.expanded;
+                }
+                TodoMessage::Delete => {
+                    self.instance.remove(&id);
+                    self.refresh_states();
+                }
+                TodoMessage::ToggleChild => {
+                    if let Some((father_id, child_vec)) = &mut self.dep_selection {
+                        if child_vec.contains(&id) {
+                            util::remove_from_vec(
+                                &mut self.instance.get_mut(&id).unwrap().dependents,
+                                father_id,
+                            );
+                            util::remove_from_vec(child_vec, &id);
+                        } else {
+                            self.instance.child(father_id, &id);
+                            child_vec.push(id);
+                        }
+                    }
                 }
             },
         };
@@ -172,26 +208,28 @@ impl Application for TodoApplication {
             ));
         }
 
-        let todo_views: Element<_> = column({
-            let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-            for todo in &self.instance.todos {
-                if todo.dependents.is_empty() {
-                    for view in &mut self.get_state(todo.get_id()).unwrap().get_view(self) {
-                        let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
-                        row_c.push(horizontal_space(view.0).into());
-                        row_c.append(&mut view.1);
-                        vec.push(
-                            container(container(row(row_c)).max_width(750))
-                                .align_x(alignment::Horizontal::Center)
-                                .width(Length::Fill)
-                                .into(),
-                        );
+        let todo_views: Element<_> = scrollable(
+            column({
+                let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+                for todo in &self.instance.todos {
+                    if todo.dependents.is_empty() {
+                        for view in &mut self.get_state(todo.get_id()).unwrap().get_view(self) {
+                            let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
+                            row_c.push(horizontal_space(view.0).into());
+                            row_c.append(&mut view.1);
+                            vec.push(
+                                container(container(row(row_c)).max_width(750))
+                                    .align_x(alignment::Horizontal::Center)
+                                    .width(Length::Fill)
+                                    .into(),
+                            );
+                        }
                     }
                 }
-            }
-            vec
-        })
-        .spacing(7.5)
+                vec
+            })
+            .spacing(7.5),
+        )
         .into();
 
         todo_views
@@ -220,6 +258,8 @@ enum TodoMessage {
     ToggleComplete,
     Edit(EditMessage),
     ExpandToggle,
+    Delete,
+    ToggleChild,
 }
 
 #[derive(Debug, Clone)]
@@ -230,6 +270,7 @@ enum EditMessage {
     Deadline(String),
     Tags(String),
     ToggleEdit,
+    ToggleSelectChildren,
 }
 
 struct TodoState {
@@ -264,13 +305,16 @@ impl TodoState {
         } else {
             self_vec.push(
                 container(
-                    button(appearance::icon(if self.expanded { '' } else { '' }))
-                        .width(20)
-                        .style(theme::Button::Text)
-                        .on_press(Message::TodoMessage(
-                            self.id.to_owned(),
-                            TodoMessage::ExpandToggle,
-                        )),
+                    button(
+                        appearance::icon(if self.expanded { '' } else { '' })
+                            .style(theme::Text::Color(Color::from_rgb(0.5, 0.5, 0.5))),
+                    )
+                    .width(20)
+                    .style(theme::Button::Text)
+                    .on_press(Message::TodoMessage(
+                        self.id.to_owned(),
+                        TodoMessage::ExpandToggle,
+                    )),
                 )
                 .height(height)
                 .center_y()
@@ -301,6 +345,7 @@ impl TodoState {
         let mut right_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
 
         if !self.editing {
+            // Todo information
             if let Some(time) = &todo.time {
                 left_vec.push(
                     container(if time.eq(&Local::now().date_naive()) {
@@ -372,7 +417,16 @@ impl TodoState {
                             if ddl.date().eq(&Local::now().date_naive()) {
                                 String::from("Today")
                             } else {
-                                format!("{} {}", util::get_month_str(ddl.month()), ddl.day())
+                                format!(
+                                    "{}{} {}",
+                                    if ddl.year().eq(&Local::now().year()) {
+                                        String::new()
+                                    } else {
+                                        format!("{} ", ddl.year())
+                                    },
+                                    util::get_month_str(ddl.month()),
+                                    ddl.day()
+                                )
                             },
                             ddl.time().format("%H:%M")
                         ))
@@ -396,9 +450,31 @@ impl TodoState {
                     .into(),
                 );
             }
+
+            if let Some((father_id, child_vec)) = &app.dep_selection {
+                if app.instance.child_able(father_id, &self.id) || child_vec.contains(&self.id) {
+                    right_vec.push(horizontal_space(7.5).into());
+                    right_vec.push(
+                        container(
+                            button(appearance::icon(if !child_vec.contains(&self.id) {
+                                '󰝦'
+                            } else {
+                                '󰻃'
+                            }))
+                            .style(theme::Button::Text)
+                            .on_press(Message::TodoMessage(self.id, TodoMessage::ToggleChild)),
+                        )
+                        .height(height)
+                        .into(),
+                    );
+                }
+            }
+
+            right_vec.push(horizontal_space(12.5).into());
         } else {
             let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
 
+            // Todo Editing
             col_vec.push(
                 row!(
                     container(appearance::icon('󰑕')).height(height).center_y(),
@@ -492,7 +568,10 @@ impl TodoState {
             self_vec.push(column(col_vec).into());
 
             right_vec.push(horizontal_space(8.5).into());
-            right_vec.push(
+
+            // Right side controls for editing
+            let mut controls_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+            controls_vec.push(
                 container(
                     button(
                         appearance::icon('󰸞')
@@ -508,6 +587,45 @@ impl TodoState {
                 .center_y()
                 .into(),
             );
+
+            controls_vec.push(
+                container(
+                    button(
+                        appearance::icon(if app.dep_selection.is_some() {
+                            '󱏒'
+                        } else {
+                            '󰙅'
+                        })
+                        .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
+                    )
+                    .style(theme::Button::Text)
+                    .on_press(Message::TodoMessage(
+                        self.id.to_owned(),
+                        TodoMessage::Edit(EditMessage::ToggleSelectChildren),
+                    )),
+                )
+                .height(height)
+                .center_y()
+                .into(),
+            );
+            controls_vec.push(
+                container(
+                    button(
+                        appearance::icon('󰩹')
+                            .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
+                    )
+                    .style(theme::Button::Text)
+                    .on_press(Message::TodoMessage(
+                        self.id.to_owned(),
+                        TodoMessage::Delete,
+                    )),
+                )
+                .height(height)
+                .center_y()
+                .into(),
+            );
+
+            right_vec.push(column(controls_vec).into());
         }
 
         right_vec.push(horizontal_space(12).into());
