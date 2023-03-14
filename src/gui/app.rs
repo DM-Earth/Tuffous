@@ -1,7 +1,10 @@
 use chrono::{Datelike, Local};
 use iced::{
     alignment, executor, theme,
-    widget::{button, column, container, horizontal_space, row, scrollable, text, text_input},
+    widget::{
+        button, column, container, horizontal_space, row, scrollable, text, text_input,
+        vertical_space,
+    },
     window, Application, Color, Element, Length, Renderer, Settings, Theme,
 };
 
@@ -16,18 +19,132 @@ struct TodoApplication {
     pub instance: TodoInstance,
     pub states: Vec<TodoState>,
     pub dep_selection: Option<(u64, Vec<u64>)>,
+    pub range: Vec<u64>,
+    pub complete_filter: TodoCompleteFilter,
+    pub view: TodoView,
 }
 
 pub fn run() -> iced::Result {
     TodoApplication::run(Settings {
         window: window::Settings {
-            size: (650, 800),
+            size: (850, 700),
             min_size: Option::Some((500, 650)),
             ..window::Settings::default()
         },
         default_font: Some(appearance::NOTO_SANS),
         ..Settings::default()
     })
+}
+
+enum TodoCompleteFilter {
+    Completed,
+    NotComplete,
+    All,
+}
+
+impl TodoCompleteFilter {
+    pub fn test(&self, todo: &Todo) -> bool {
+        match self {
+            Self::Completed => todo.completed,
+            Self::NotComplete => !todo.completed,
+            Self::All => true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum TodoView {
+    Today,
+    Upcoming,
+    Anytime,
+    Logbook,
+    All,
+    Project(u64),
+}
+
+impl TodoView {
+    pub fn get_title(&self, instance: &TodoInstance, theme: Theme) -> (char, String, Color) {
+        let style = || appearance::StyleSheet::from_theme(&theme);
+        match self {
+            TodoView::Today => ('', String::from("Today"), style().star),
+            TodoView::Upcoming => ('󰸗', String::from("Upcoming"), style().flag),
+            TodoView::Anytime => ('', String::from("Anytime"), style().blue_green),
+            TodoView::Logbook => ('󱓵', String::from("Logbook"), style().green),
+            TodoView::All => ('󰾍', String::from("All"), style().gray),
+            TodoView::Project(id) => (
+                get_completion_state_view(id, instance),
+                instance.get(id).unwrap().metadata.name.to_owned(),
+                style().checkbox,
+            ),
+        }
+    }
+
+    pub fn filter(&self, instance: &TodoInstance, complete: &TodoCompleteFilter) -> Vec<u64> {
+        let get_relatives = |id: &u64| {
+            let mut vec = Vec::new();
+            for father in instance.get_all_deps(id) {
+                if !vec.contains(&father) {
+                    vec.push(father)
+                }
+            }
+
+            vec
+        };
+
+        let mut vec = Vec::new();
+
+        for todo in &instance.todos {
+            if complete.test(todo) && self.test(todo.get_id(), instance) {
+                if !vec.contains(todo.get_id()) {
+                    vec.push(*todo.get_id());
+                }
+
+                for father in get_relatives(todo.get_id()) {
+                    if !vec.contains(&father) {
+                        vec.push(father);
+                    }
+                }
+
+                for child in instance.get_children(todo.get_id()) {
+                    if complete.test(instance.get(&child).unwrap()) && !vec.contains(&child) {
+                        vec.push(child);
+                    }
+                }
+            }
+
+            if vec.len() > 1024 {
+                break;
+            }
+        }
+
+        vec
+    }
+
+    pub fn test(&self, id: &u64, instance: &TodoInstance) -> bool {
+        let todo = instance.get(id).unwrap();
+        match self {
+            TodoView::Today => {
+                if let Some(date) = todo.time {
+                    date.eq(&Local::now().date_naive())
+                } else {
+                    false
+                }
+            }
+            TodoView::Upcoming => {
+                if let Some(date) = todo.time {
+                    !date.eq(&Local::now().date_naive())
+                } else if let Some(ddl) = todo.deadline {
+                    Local::now().date_naive() < ddl.date()
+                } else {
+                    false
+                }
+            }
+            TodoView::Anytime => todo.time.is_none() && todo.deadline.is_none(),
+            TodoView::Logbook => todo.completed,
+            TodoView::All => true,
+            TodoView::Project(project_id) => instance.get_children(&project_id).contains(id),
+        }
+    }
 }
 
 impl TodoApplication {
@@ -50,6 +167,115 @@ impl TodoApplication {
             }
         }
     }
+
+    pub fn style_sheet(&self) -> appearance::StyleSheet {
+        appearance::StyleSheet::from_theme(&self.theme())
+    }
+
+    fn view_todos(&self) -> iced::Element<Message> {
+        if self.range.is_empty() {
+            container(
+                appearance::icon(self.view.get_title(&self.instance, self.theme()).0)
+                    .style(theme::Text::Color(self.style_sheet().gray))
+                    .size(100)
+                    .width(Length::Fill),
+            )
+            .center_x()
+            .center_y()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+        } else {
+            let mut todos = Vec::new();
+            for todo_id in self.instance.get_todos() {
+                todos.push((
+                    self.instance.get(&todo_id).unwrap(),
+                    self.get_state(&todo_id).unwrap(),
+                ));
+            }
+
+            let todo_views = scrollable(
+                column({
+                    let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+                    vec.push(horizontal_space(25).into());
+                    for todo in &self.instance.todos {
+                        if todo.dependents.is_empty() && self.range.contains(todo.get_id()) {
+                            for view in &mut self.get_state(todo.get_id()).unwrap().get_view(self) {
+                                let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
+                                row_c.push(horizontal_space(view.0).into());
+                                row_c.append(&mut view.1);
+                                vec.push(
+                                    container(container(row(row_c)).max_width(650))
+                                        .align_x(alignment::Horizontal::Center)
+                                        .width(Length::Fill)
+                                        .into(),
+                                );
+                            }
+                        }
+                    }
+                    vec
+                })
+                .spacing(7.5),
+            );
+
+            container(todo_views).center_x().into()
+        }
+    }
+
+    fn view_sidebar(&self) -> iced::Element<Message> {
+        let height = 30;
+        let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+
+        self_vec.push(vertical_space(7.5).into());
+
+        let view_button = |view: TodoView| -> Element<'_, Message, Renderer> {
+            row!(
+                horizontal_space(7.5),
+                container(
+                    button(row!(
+                        appearance::icon(view.get_title(&self.instance, self.theme()).0).style(
+                            theme::Text::Color(view.get_title(&self.instance, self.theme()).2)
+                        ),
+                        text(format!(
+                            "  {}",
+                            view.get_title(&self.instance, self.theme()).1
+                        )),
+                        horizontal_space(Length::Fill)
+                    ))
+                    .on_press(Message::SwitchView(view.clone()))
+                    .style(theme::Button::Text),
+                )
+                .style(if self.view.eq(&view) {
+                    theme::Container::Box
+                } else {
+                    theme::Container::Transparent
+                })
+                .height(height)
+                .center_y()
+                .align_x(alignment::Horizontal::Left)
+                .width(Length::Fill)
+                .max_width(150)
+            )
+            .into()
+        };
+
+        self_vec.push(view_button(TodoView::Today));
+        self_vec.push(view_button(TodoView::Upcoming));
+        self_vec.push(view_button(TodoView::Anytime));
+        self_vec.push(view_button(TodoView::Logbook));
+        self_vec.push(view_button(TodoView::All));
+
+        container(column(self_vec))
+            .width(175)
+            .height(Length::Fill)
+            .align_x(alignment::Horizontal::Left)
+            .align_y(alignment::Vertical::Top)
+            .into()
+    }
+
+    pub fn refresh_range(&mut self) {
+        self.range = self.view.filter(&self.instance, &self.complete_filter);
+    }
 }
 
 impl Application for TodoApplication {
@@ -66,23 +292,31 @@ impl Application for TodoApplication {
             instance: TodoInstance::create(&flags.path),
             states: Vec::new(),
             dep_selection: Option::None,
+            range: Vec::new(),
+            complete_filter: TodoCompleteFilter::NotComplete,
+            view: TodoView::Today,
         };
         app.instance.read_all();
         app.instance.refresh();
         app.refresh_states();
+        app.refresh_range();
         (app, iced::Command::none())
     }
 
     fn title(&self) -> String {
         format!("Tuffous ({})", {
             let mut todos = 0;
-            for todo_id in self.instance.get_todos() {
+            for todo_id in TodoView::Today.filter(&self.instance, &TodoCompleteFilter::Completed) {
                 if !self.instance.get(&todo_id).unwrap().completed {
                     todos += 1;
                 }
             }
             todos
         })
+    }
+
+    fn theme(&self) -> Self::Theme {
+        Theme::Dark
     }
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
@@ -92,6 +326,7 @@ impl Application for TodoApplication {
                 TodoMessage::ToggleComplete => {
                     let mut todo = self.instance.get_mut(&id).unwrap();
                     todo.completed = !todo.completed;
+                    self.refresh_range();
                 }
                 TodoMessage::Edit(edit_msg) => match edit_msg {
                     EditMessage::Name(name) => {
@@ -137,6 +372,8 @@ impl Application for TodoApplication {
                                 }
                             }
                         }
+
+                        self.refresh_range();
                     }
                     EditMessage::Date(date) => {
                         if let Some(date_r) = util::parse_date(&date) {
@@ -193,6 +430,18 @@ impl Application for TodoApplication {
                     }
                 }
             },
+            Message::SwitchView(view) => {
+                self.view = view;
+
+                self.complete_filter = match self.view {
+                    TodoView::Logbook => TodoCompleteFilter::Completed,
+                    _ => TodoCompleteFilter::NotComplete,
+                };
+
+                self.refresh_range();
+                self.states.clear();
+                self.refresh_states();
+            }
         };
         self.instance.write_all();
         self.refresh_states();
@@ -200,39 +449,9 @@ impl Application for TodoApplication {
     }
 
     fn view(&self) -> iced::Element<Self::Message> {
-        let mut todos = Vec::new();
-        for todo_id in self.instance.get_todos() {
-            todos.push((
-                self.instance.get(&todo_id).unwrap(),
-                self.get_state(&todo_id).unwrap(),
-            ));
-        }
-
-        let todo_views: Element<_> = scrollable(
-            column({
-                let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-                for todo in &self.instance.todos {
-                    if todo.dependents.is_empty() {
-                        for view in &mut self.get_state(todo.get_id()).unwrap().get_view(self) {
-                            let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
-                            row_c.push(horizontal_space(view.0).into());
-                            row_c.append(&mut view.1);
-                            vec.push(
-                                container(container(row(row_c)).max_width(750))
-                                    .align_x(alignment::Horizontal::Center)
-                                    .width(Length::Fill)
-                                    .into(),
-                            );
-                        }
-                    }
-                }
-                vec
-            })
-            .spacing(7.5),
-        )
-        .into();
-
-        todo_views
+        row(vec![self.view_sidebar(), self.view_todos()])
+            .height(Length::Fill)
+            .into()
     }
 }
 
@@ -251,6 +470,7 @@ impl Default for Flags {
 #[derive(Debug, Clone)]
 enum Message {
     TodoMessage(u64, TodoMessage),
+    SwitchView(TodoView),
 }
 
 #[derive(Debug, Clone)]
@@ -307,7 +527,7 @@ impl TodoState {
                 container(
                     button(
                         appearance::icon(if self.expanded { '' } else { '' })
-                            .style(theme::Text::Color(Color::from_rgb(0.5, 0.5, 0.5))),
+                            .style(theme::Text::Color(app.style_sheet().gray)),
                     )
                     .width(20)
                     .style(theme::Button::Text)
@@ -326,9 +546,9 @@ impl TodoState {
         self_vec.push(
             container(
                 button(
-                    appearance::icon(self.get_completion_state_view(&app.instance))
+                    appearance::icon(get_completion_state_view(&self.id, &app.instance))
                         .size(17.5)
-                        .style(theme::Text::Color(Color::from_rgb(0.0, 0.0, 0.8))),
+                        .style(theme::Text::Color(app.style_sheet().checkbox)),
                 )
                 .on_press(Message::TodoMessage(
                     self.id.to_owned(),
@@ -349,11 +569,10 @@ impl TodoState {
             if let Some(time) = &todo.time {
                 left_vec.push(
                     container(if time.eq(&Local::now().date_naive()) {
-                        appearance::icon('')
-                            .style(theme::Text::Color(Color::from_rgb(1.0, 0.84, 0.0)))
+                        appearance::icon('').style(theme::Text::Color(app.style_sheet().star))
                     } else {
                         text(format!(
-                            " {}{} {} ",
+                            "  {}{} {}  ",
                             if time.year() == Local::now().year() {
                                 String::from("")
                             } else {
@@ -430,7 +649,7 @@ impl TodoState {
                             },
                             ddl.time().format("%H:%M")
                         ))
-                        .style(theme::Text::Color(Color::from_rgb(0.9, 0.0, 0.0))),
+                        .style(theme::Text::Color(app.style_sheet().flag)),
                     )
                     .height(height)
                     .center_y()
@@ -443,7 +662,7 @@ impl TodoState {
                         } else {
                             '󰮛'
                         })
-                        .style(theme::Text::Color(Color::from_rgb(0.9, 0.0, 0.0))),
+                        .style(theme::Text::Color(app.style_sheet().flag)),
                     )
                     .height(height)
                     .center_y()
@@ -469,8 +688,6 @@ impl TodoState {
                     );
                 }
             }
-
-            right_vec.push(horizontal_space(12.5).into());
         } else {
             let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
 
@@ -577,15 +794,12 @@ impl TodoState {
             let mut controls_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
             controls_vec.push(
                 container(
-                    button(
-                        appearance::icon('󰸞')
-                            .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
-                    )
-                    .style(theme::Button::Text)
-                    .on_press(Message::TodoMessage(
-                        self.id.to_owned(),
-                        TodoMessage::Edit(EditMessage::ToggleEdit),
-                    )),
+                    button(appearance::icon('󰸞').style(theme::Text::Color(app.style_sheet().gray)))
+                        .style(theme::Button::Text)
+                        .on_press(Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Edit(EditMessage::ToggleEdit),
+                        )),
                 )
                 .height(height)
                 .center_y()
@@ -594,35 +808,30 @@ impl TodoState {
 
             controls_vec.push(
                 container(
-                    button(
-                        appearance::icon(if app.dep_selection.is_some() {
-                            '󱏒'
-                        } else {
-                            '󰙅'
-                        })
-                        .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
-                    )
-                    .style(theme::Button::Text)
-                    .on_press(Message::TodoMessage(
-                        self.id.to_owned(),
-                        TodoMessage::Edit(EditMessage::ToggleSelectChildren),
-                    )),
+                    button(appearance::icon('󰙅').style(theme::Text::Color(app.style_sheet().gray)))
+                        .style(theme::Button::Text)
+                        .on_press(Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Edit(EditMessage::ToggleSelectChildren),
+                        )),
                 )
+                .style(if app.dep_selection.is_none() {
+                    theme::Container::Transparent
+                } else {
+                    theme::Container::Box
+                })
                 .height(height)
                 .center_y()
                 .into(),
             );
             controls_vec.push(
                 container(
-                    button(
-                        appearance::icon('󰩹')
-                            .style(theme::Text::Color(Color::from_rgb(0.65, 0.65, 0.65))),
-                    )
-                    .style(theme::Button::Text)
-                    .on_press(Message::TodoMessage(
-                        self.id.to_owned(),
-                        TodoMessage::Delete,
-                    )),
+                    button(appearance::icon('󰩹').style(theme::Text::Color(app.style_sheet().gray)))
+                        .style(theme::Button::Text)
+                        .on_press(Message::TodoMessage(
+                            self.id.to_owned(),
+                            TodoMessage::Delete,
+                        )),
                 )
                 .height(height)
                 .center_y()
@@ -632,7 +841,7 @@ impl TodoState {
             right_vec.push(column(controls_vec).into());
         }
 
-        right_vec.push(horizontal_space(12).into());
+        right_vec.push(horizontal_space(22.5).into());
 
         self_vec.push(
             container(row(left_vec))
@@ -658,7 +867,7 @@ impl TodoState {
                     row![
                         horizontal_space(57.5),
                         text(todo.metadata.details.clone())
-                            .style(theme::Text::Color(Color::from_rgb(0.35, 0.35, 0.35)))
+                            .style(theme::Text::Color(app.style_sheet().gray))
                     ]
                 )
                 .into()]
@@ -666,31 +875,32 @@ impl TodoState {
         ));
         if self.expanded {
             for todo_id in app.instance.get_children_once(&self.id) {
-                for v in app.get_state(&todo_id).unwrap().get_view(app) {
-                    vec.push((v.0 + 25, v.1));
+                if app.range.contains(&todo_id) {
+                    for v in app.get_state(&todo_id).unwrap().get_view(app) {
+                        vec.push((v.0 + 25, v.1));
+                    }
                 }
             }
         }
         vec
     }
+}
 
-    pub fn get_completion_state_view(&self, instance: &TodoInstance) -> char {
-        let todo = instance.get(&self.id).unwrap();
-        if todo.completed {
-            if instance.get_children_once(&self.id).is_empty() {
-                '󰄲'
-            } else {
-                '󰗠'
-            }
+fn get_completion_state_view(id: &u64, instance: &TodoInstance) -> char {
+    let todo = instance.get(id).unwrap();
+    if todo.completed {
+        if instance.get_children_once(id).is_empty() {
+            '󰄲'
         } else {
-            if instance.get_children_once(&self.id).is_empty() {
-                '󰄱'
-            } else {
-                util::get_progression_char(
-                    (instance.get_weight(&self.id, true) * 100)
-                        / instance.get_weight(&self.id, false),
-                )
-            }
+            '󰗠'
+        }
+    } else {
+        if instance.get_children_once(id).is_empty() {
+            '󰄱'
+        } else {
+            util::get_progression_char(
+                (instance.get_weight(id, true) * 100) / instance.get_weight(id, false),
+            )
         }
     }
 }
