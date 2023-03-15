@@ -22,13 +22,15 @@ struct TodoApplication {
     pub range: Vec<u64>,
     pub complete_filter: TodoCompleteFilter,
     pub view: TodoView,
+    pub search_cache: String,
+    pub search: bool,
 }
 
 pub fn run() -> iced::Result {
     TodoApplication::run(Settings {
         window: window::Settings {
             size: (850, 700),
-            min_size: Option::Some((500, 650)),
+            min_size: Option::Some((600, 650)),
             ..window::Settings::default()
         },
         default_font: Some(appearance::NOTO_SANS),
@@ -80,7 +82,12 @@ impl TodoView {
         }
     }
 
-    pub fn filter(&self, instance: &TodoInstance, complete: &TodoCompleteFilter) -> Vec<u64> {
+    pub fn filter(
+        &self,
+        instance: &TodoInstance,
+        complete: &TodoCompleteFilter,
+        keywords: &Vec<String>,
+    ) -> Vec<u64> {
         let get_relatives = |id: &u64| {
             let mut vec = Vec::new();
             for father in instance.get_all_deps(id) {
@@ -95,7 +102,28 @@ impl TodoView {
         let mut vec = Vec::new();
 
         for todo in &instance.todos {
-            if complete.test(todo) && self.test(todo.get_id(), instance) {
+            if complete.test(todo)
+                && self.test(todo.get_id(), instance)
+                && (keywords.is_empty() || {
+                    let mut b = true;
+                    for key in keywords {
+                        b = b
+                            && (todo.metadata.name.to_lowercase().contains(key)
+                                || todo.metadata.details.to_lowercase().contains(key)
+                                || {
+                                    let mut c = false;
+                                    for tag in &todo.tags {
+                                        if tag.to_lowercase().contains(key) {
+                                            c = true;
+                                            break;
+                                        }
+                                    }
+                                    c
+                                })
+                    }
+                    b
+                })
+            {
                 if !vec.contains(todo.get_id()) {
                     vec.push(*todo.get_id());
                 }
@@ -145,7 +173,9 @@ impl TodoView {
             TodoView::Anytime => todo.time.is_none() && todo.deadline.is_none(),
             TodoView::Logbook => todo.completed,
             TodoView::All => true,
-            TodoView::Project(project_id) => instance.get_children(&project_id).contains(id),
+            TodoView::Project(project_id) => {
+                instance.get_children(&project_id).contains(id) || id.eq(project_id)
+            }
         }
     }
 
@@ -209,7 +239,7 @@ impl TodoApplication {
     }
 
     fn view_todos(&self) -> iced::Element<Message> {
-        container(if self.range.is_empty() {
+        container(if self.range.is_empty() && !self.search {
             container(
                 appearance::icon(self.view.get_title(&self.instance, self.theme()).0)
                     .style(theme::Text::Color(self.style_sheet().gray))
@@ -232,7 +262,23 @@ impl TodoApplication {
             let todo_views = scrollable(
                 column({
                     let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-                    vec.push(horizontal_space(25).into());
+
+                    if self.search {
+                        vec.push(horizontal_space(35).into());
+                        vec.push(
+                            container(
+                                text_input("Search", &self.search_cache, |s| {
+                                    Message::CacheSearchContent(s)
+                                })
+                                .width(360),
+                            )
+                            .center_x()
+                            .width(Length::Fill)
+                            .into(),
+                        );
+                    }
+
+                    vec.push(horizontal_space(35).into());
                     for todo in &self.instance.todos {
                         if todo.dependents.is_empty() && self.range.contains(todo.get_id()) {
                             for view in &mut self.get_state(todo.get_id()).unwrap().get_view(self) {
@@ -307,7 +353,7 @@ impl TodoApplication {
             let mut pinned = Vec::new();
             for todo in &self.instance.todos {
                 for tag in &todo.tags {
-                    if tag.to_lowercase().eq("pinned") {
+                    if !todo.completed && tag.to_lowercase().eq("pinned") {
                         pinned.push(*todo.get_id());
                         break;
                     }
@@ -354,20 +400,43 @@ impl TodoApplication {
             self_vec.push(horizontal_space(Length::FillPortion(2)).into());
         }
 
+        if !self
+            .view
+            .default_complete_filter()
+            .eq(&TodoCompleteFilter::All)
+        {
+            self_vec.push(
+                container(
+                    button(
+                        appearance::icon(if self.complete_filter.eq(&TodoCompleteFilter::All) {
+                            '󰘽'
+                        } else {
+                            '󰘾'
+                        })
+                        .style(theme::Text::Color(self.style_sheet().gray))
+                        .size(25)
+                        .width(Length::FillPortion(2)),
+                    )
+                    .style(theme::Button::Text)
+                    .on_press(Message::SwitchCompleteFilter),
+                )
+                .height(height)
+                .center_y()
+                .into(),
+            );
+            self_vec.push(horizontal_space(Length::FillPortion(2)).into());
+        }
+
         self_vec.push(
             container(
                 button(
-                    appearance::icon(if self.complete_filter.eq(&TodoCompleteFilter::All) {
-                        '󰘽'
-                    } else {
-                        '󰘾'
-                    })
-                    .style(theme::Text::Color(self.style_sheet().gray))
-                    .size(25)
-                    .width(Length::FillPortion(2)),
+                    appearance::icon(if self.search { '󰦀' } else { '󰍉' })
+                        .style(theme::Text::Color(self.style_sheet().gray))
+                        .size(25)
+                        .width(Length::FillPortion(2)),
                 )
                 .style(theme::Button::Text)
-                .on_press(Message::SwitchCompleteFilter),
+                .on_press(Message::ToggleSearch),
             )
             .height(height)
             .center_y()
@@ -383,7 +452,19 @@ impl TodoApplication {
     }
 
     pub fn refresh_range(&mut self) {
-        self.range = self.view.filter(&self.instance, &self.complete_filter);
+        self.range = self.view.filter(
+            &self.instance,
+            &self.complete_filter,
+            &if self.search {
+                self.search_cache
+                    .split_whitespace()
+                    .into_iter()
+                    .map(|s| s.to_lowercase())
+                    .collect()
+            } else {
+                Vec::new()
+            },
+        );
     }
 }
 
@@ -404,6 +485,8 @@ impl Application for TodoApplication {
             range: Vec::new(),
             complete_filter: TodoCompleteFilter::NotComplete,
             view: TodoView::Today,
+            search_cache: String::new(),
+            search: false,
         };
         app.instance.read_all();
         app.instance.refresh();
@@ -566,6 +649,16 @@ impl Application for TodoApplication {
                 }
                 self.refresh_range();
             }
+            Message::ToggleSearch => {
+                self.search = !self.search;
+                if !self.search {
+                    self.search_cache = String::new();
+                }
+            }
+            Message::CacheSearchContent(string) => {
+                self.search_cache = string;
+                self.refresh_range();
+            }
         };
         self.instance.write_all();
         self.refresh_states();
@@ -602,6 +695,8 @@ enum Message {
     SwitchView(TodoView),
     CreateTodo,
     SwitchCompleteFilter,
+    ToggleSearch,
+    CacheSearchContent(String),
 }
 
 #[derive(Debug, Clone)]
@@ -647,7 +742,7 @@ impl TodoState {
         &'a self,
         app: &'a TodoApplication,
     ) -> Vec<(u16, Vec<Element<'_, Message, Renderer>>)> {
-        let height = 27.5;
+        let height = 28.0;
 
         let todo = app.instance.get(&self.id).unwrap();
         let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
