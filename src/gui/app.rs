@@ -34,7 +34,11 @@ pub fn run() -> iced::Result {
             min_size: Option::Some((600, 650)),
             ..window::Settings::default()
         },
-        default_font: Some(appearance::NOTO_SANS),
+        default_font: if appearance::FONT_BYTES.is_empty() {
+            Some(appearance::NOTO_SANS)
+        } else {
+            Some(&appearance::FONT_BYTES)
+        },
         ..Settings::default()
     })
 }
@@ -499,6 +503,7 @@ impl Application for TodoApplication {
     type Flags = Flags;
 
     fn new(flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
+        let config = config::ConfigInstance::get();
         let mut app = TodoApplication {
             instance: TodoInstance::create(&flags.path),
             states: Vec::new(),
@@ -508,7 +513,7 @@ impl Application for TodoApplication {
             view: TodoView::Today,
             search_cache: String::new(),
             search: false,
-            config: config::ConfigInstance::get(),
+            config,
         };
         app.instance.read_all();
         app.instance.refresh();
