@@ -234,10 +234,9 @@ impl TodoInstance {
             panic!("Can't child the target child")
         }
 
-        let mut target = self.get(child).unwrap().clone();
+        let target = &mut self.get_mut(child).unwrap();
         if !target.dependents.contains(father) {
             target.dependents.push(*father);
-            self.replace(target);
         }
     }
 
