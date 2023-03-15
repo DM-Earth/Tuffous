@@ -320,7 +320,8 @@ impl TodoApplication {
                         text(format!(
                             "  {}",
                             view.get_title(&self.instance, self.theme()).1
-                        )),
+                        ))
+                        .size(20),
                         horizontal_space(Length::Fill)
                     ))
                     .on_press(Message::SwitchView(view.clone()))
@@ -335,7 +336,7 @@ impl TodoApplication {
                 .center_y()
                 .align_x(alignment::Horizontal::Left)
                 .width(Length::Fill)
-                .max_width(150)
+                .max_width(200)
             )
             .into()
         };
@@ -366,7 +367,7 @@ impl TodoApplication {
         }
 
         container(column(self_vec))
-            .width(175)
+            .width(200)
             .height(Length::Fill)
             .align_x(alignment::Horizontal::Left)
             .align_y(alignment::Vertical::Top)
