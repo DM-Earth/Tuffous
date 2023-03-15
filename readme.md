@@ -1,21 +1,24 @@
 # Tuffous
 
-Tuffous is a powerful CLI todo manager.
+Tuffous is a powerful CLI and GUI todo manager.
 
 ## Features
 
 - Details, deadline, time, weight and tags support for todos.
 - Infinite layers of father/children todos.
+- Things-3-like GUI fit with the features of Tuffous.
 
 ## Requirements
 
-Tuffous requires a nerd-font patched font in order to display icons normally.
+Tuffous requires a nerd-font patched font in order to display icons in CLI normally.
+
+In GUI you don't need a special font.
 
 ## Usage
 
 To use Tuffous, you need first initialize a new todo repo using `init` in order to store todos.
 
-Tuffous is dictionary-based, so you need to run it in the target folder you want.
+Tuffous is path-based, so you need to run it in the target folder you want.
 
 ### Commands
 
@@ -29,6 +32,7 @@ father      Mark a todo as father with filter(s) in the cache
 child       Mark todo(s) as children with filter(s) in the cache
 remove      Remove todo(s) as children with filter(s)
 cleancache  Clean cache
+gui         Open GUI (WIP)
 help        Print this message or the help of the given subcommand(s)
 ```
 
