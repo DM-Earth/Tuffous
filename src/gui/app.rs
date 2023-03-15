@@ -36,6 +36,7 @@ pub fn run() -> iced::Result {
     })
 }
 
+#[derive(PartialEq, Eq)]
 enum TodoCompleteFilter {
     Completed,
     NotComplete,
@@ -126,6 +127,8 @@ impl TodoView {
             TodoView::Today => {
                 if let Some(date) = todo.time {
                     date.eq(&Local::now().date_naive())
+                } else if let Some(ddl) = todo.deadline {
+                    ddl.date() <= Local::now().date_naive()
                 } else {
                     false
                 }
@@ -143,6 +146,39 @@ impl TodoView {
             TodoView::Logbook => todo.completed,
             TodoView::All => true,
             TodoView::Project(project_id) => instance.get_children(&project_id).contains(id),
+        }
+    }
+
+    pub fn default_complete_filter(&self) -> TodoCompleteFilter {
+        match self {
+            Self::Logbook => TodoCompleteFilter::Completed,
+            _ => TodoCompleteFilter::NotComplete,
+        }
+    }
+
+    pub fn process_todo(&self, todo: &mut Todo) {
+        if !self.allow_create_todo() {
+            unreachable!()
+        }
+
+        match self {
+            Self::Today => {
+                todo.time = Option::Some(Local::now().date_naive());
+            }
+            Self::Project(project) => {
+                todo.dependents.push(*project);
+            }
+            _ => (),
+        }
+    }
+
+    pub fn allow_create_todo(&self) -> bool {
+        match self {
+            Self::Today => true,
+            Self::Project(_) => true,
+            Self::Anytime => true,
+            Self::All => true,
+            _ => false,
         }
     }
 }
@@ -173,7 +209,7 @@ impl TodoApplication {
     }
 
     fn view_todos(&self) -> iced::Element<Message> {
-        if self.range.is_empty() {
+        container(if self.range.is_empty() {
             container(
                 appearance::icon(self.view.get_title(&self.instance, self.theme()).0)
                     .style(theme::Text::Color(self.style_sheet().gray))
@@ -184,7 +220,6 @@ impl TodoApplication {
             .center_y()
             .width(Length::Fill)
             .height(Length::Fill)
-            .into()
         } else {
             let mut todos = Vec::new();
             for todo_id in self.instance.get_todos() {
@@ -218,8 +253,11 @@ impl TodoApplication {
                 .spacing(7.5),
             );
 
-            container(todo_views).center_x().into()
-        }
+            container(todo_views).center_x()
+        })
+        .height(Length::Fill)
+        .width(Length::Fill)
+        .into()
     }
 
     fn view_sidebar(&self) -> iced::Element<Message> {
@@ -265,11 +303,82 @@ impl TodoApplication {
         self_vec.push(view_button(TodoView::Logbook));
         self_vec.push(view_button(TodoView::All));
 
+        {
+            let mut pinned = Vec::new();
+            for todo in &self.instance.todos {
+                for tag in &todo.tags {
+                    if tag.to_lowercase().eq("pinned") {
+                        pinned.push(*todo.get_id());
+                        break;
+                    }
+                }
+            }
+
+            if !pinned.is_empty() {
+                self_vec.push(vertical_space(15).into());
+                for pin in pinned {
+                    self_vec.push(view_button(TodoView::Project(pin)));
+                }
+            }
+        }
+
         container(column(self_vec))
             .width(175)
             .height(Length::Fill)
             .align_x(alignment::Horizontal::Left)
             .align_y(alignment::Vertical::Top)
+            .into()
+    }
+
+    pub fn view_controls(&self) -> iced::Element<Message> {
+        let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        let height = 45;
+        self_vec.push(horizontal_space(Length::FillPortion(1)).into());
+
+        if self.view.allow_create_todo() {
+            self_vec.push(
+                container(
+                    button(
+                        appearance::icon('󰜄')
+                            .style(theme::Text::Color(self.style_sheet().gray))
+                            .size(25)
+                            .width(Length::FillPortion(2)),
+                    )
+                    .style(theme::Button::Text)
+                    .on_press(Message::CreateTodo),
+                )
+                .height(height)
+                .center_y()
+                .into(),
+            );
+            self_vec.push(horizontal_space(Length::FillPortion(2)).into());
+        }
+
+        self_vec.push(
+            container(
+                button(
+                    appearance::icon(if self.complete_filter.eq(&TodoCompleteFilter::All) {
+                        '󰘽'
+                    } else {
+                        '󰘾'
+                    })
+                    .style(theme::Text::Color(self.style_sheet().gray))
+                    .size(25)
+                    .width(Length::FillPortion(2)),
+                )
+                .style(theme::Button::Text)
+                .on_press(Message::SwitchCompleteFilter),
+            )
+            .height(height)
+            .center_y()
+            .into(),
+        );
+
+        self_vec.push(horizontal_space(Length::FillPortion(1)).into());
+        container(row(self_vec))
+            .height(height)
+            .center_y()
+            .center_x()
             .into()
     }
 
@@ -304,15 +413,7 @@ impl Application for TodoApplication {
     }
 
     fn title(&self) -> String {
-        format!("Tuffous ({})", {
-            let mut todos = 0;
-            for todo_id in TodoView::Today.filter(&self.instance, &TodoCompleteFilter::Completed) {
-                if !self.instance.get(&todo_id).unwrap().completed {
-                    todos += 1;
-                }
-            }
-            todos
-        })
+        String::from("Tuffous")
     }
 
     fn theme(&self) -> Self::Theme {
@@ -414,6 +515,7 @@ impl Application for TodoApplication {
                 TodoMessage::Delete => {
                     self.instance.remove(&id);
                     self.refresh_states();
+                    self.refresh_range();
                 }
                 TodoMessage::ToggleChild => {
                     if let Some((father_id, child_vec)) = &mut self.dep_selection {
@@ -432,15 +534,37 @@ impl Application for TodoApplication {
             },
             Message::SwitchView(view) => {
                 self.view = view;
-
-                self.complete_filter = match self.view {
-                    TodoView::Logbook => TodoCompleteFilter::Completed,
-                    _ => TodoCompleteFilter::NotComplete,
-                };
-
+                self.complete_filter = self.view.default_complete_filter();
                 self.refresh_range();
                 self.states.clear();
                 self.refresh_states();
+            }
+            Message::CreateTodo => {
+                let mut todo = Todo::create(String::from("untitled todo"));
+                self.view.process_todo(&mut todo);
+                let id = *todo.get_id();
+                if !self.instance.get_todos().contains(todo.get_id()) {
+                    self.instance.todos.push(todo);
+                }
+                self.refresh_states();
+                self.refresh_range();
+
+                let destroy = |_command: iced::Command<Message>| {};
+                destroy(self.update(Message::TodoMessage(
+                    id,
+                    TodoMessage::Edit(EditMessage::ToggleEdit),
+                )));
+            }
+            Message::SwitchCompleteFilter => {
+                if self
+                    .complete_filter
+                    .eq(&self.view.default_complete_filter())
+                {
+                    self.complete_filter = TodoCompleteFilter::All
+                } else {
+                    self.complete_filter = self.view.default_complete_filter()
+                }
+                self.refresh_range();
             }
         };
         self.instance.write_all();
@@ -449,9 +573,14 @@ impl Application for TodoApplication {
     }
 
     fn view(&self) -> iced::Element<Self::Message> {
-        row(vec![self.view_sidebar(), self.view_todos()])
-            .height(Length::Fill)
-            .into()
+        row(vec![
+            self.view_sidebar(),
+            column(vec![self.view_todos(), self.view_controls()])
+                .width(Length::Fill)
+                .into(),
+        ])
+        .height(Length::Fill)
+        .into()
     }
 }
 
@@ -471,6 +600,8 @@ impl Default for Flags {
 enum Message {
     TodoMessage(u64, TodoMessage),
     SwitchView(TodoView),
+    CreateTodo,
+    SwitchCompleteFilter,
 }
 
 #[derive(Debug, Clone)]
