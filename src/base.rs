@@ -77,8 +77,10 @@ impl Todo {
         let p = format!("{path}/.tuffous/todos/{}.json", self.get_id());
 
         let Ok(mut file) = File::create(p) else { return };
-        file.write(serde_json::to_string(self).unwrap().as_bytes())
-            .unwrap();
+        crate::util::destroy(
+            file.write(serde_json::to_string(self).unwrap().as_bytes())
+                .unwrap(),
+        );
     }
 
     pub fn read_from_file<P: AsRef<Path>>(path: P) -> Option<Self> {

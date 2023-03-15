@@ -664,10 +664,12 @@ impl TodoCache {
     }
 
     pub fn write(&self) {
-        File::create("./.tuffous/cache.json")
-            .unwrap()
-            .write(serde_json::to_string(self).unwrap().as_bytes())
-            .unwrap();
+        crate::util::destroy(
+            File::create("./.tuffous/cache.json")
+                .unwrap()
+                .write(serde_json::to_string(self).unwrap().as_bytes())
+                .unwrap(),
+        );
     }
 
     pub fn clean(&mut self) {

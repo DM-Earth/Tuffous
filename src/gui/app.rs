@@ -174,7 +174,7 @@ impl TodoView {
             TodoView::Logbook => todo.completed,
             TodoView::All => true,
             TodoView::Project(project_id) => {
-                instance.get_children(&project_id).contains(id) || id.eq(project_id)
+                instance.get_children(project_id).contains(id) || id.eq(project_id)
             }
         }
     }
@@ -203,13 +203,10 @@ impl TodoView {
     }
 
     pub fn allow_create_todo(&self) -> bool {
-        match self {
-            Self::Today => true,
-            Self::Project(_) => true,
-            Self::Anytime => true,
-            Self::All => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::Today | Self::Project(_) | Self::Anytime | Self::All
+        )
     }
 }
 
@@ -458,7 +455,6 @@ impl TodoApplication {
             &if self.search {
                 self.search_cache
                     .split_whitespace()
-                    .into_iter()
                     .map(|s| s.to_lowercase())
                     .collect()
             } else {
@@ -522,8 +518,8 @@ impl Application for TodoApplication {
                     EditMessage::ToggleEdit => {
                         {
                             let todo = self.instance.get(&id).unwrap();
-                            let time_o = todo.time.clone();
-                            let ddl_o = todo.deadline.clone();
+                            let time_o = todo.time;
+                            let ddl_o = todo.deadline;
                             let mut state = self.get_state_mut(&id).unwrap();
                             state.editing = !state.editing;
                             if state.editing {
@@ -1120,13 +1116,11 @@ fn get_completion_state_view(id: &u64, instance: &TodoInstance) -> char {
         } else {
             '󰗠'
         }
+    } else if instance.get_children_once(id).is_empty() {
+        '󰄱'
     } else {
-        if instance.get_children_once(id).is_empty() {
-            '󰄱'
-        } else {
-            util::get_progression_char(
-                (instance.get_weight(id, true) * 100) / instance.get_weight(id, false),
-            )
-        }
+        util::get_progression_char(
+            (instance.get_weight(id, true) * 100) / instance.get_weight(id, false),
+        )
     }
 }

@@ -21,24 +21,6 @@ pub fn remove_from_vec_if<T>(vec: &mut Vec<T>, predicate: &dyn Fn(&T) -> bool) {
     }
 }
 
-pub fn vec_any_match<T>(vec: &Vec<T>, predicate: &dyn Fn(&T) -> bool) -> bool {
-    for obj in vec {
-        if predicate(obj) {
-            return true;
-        }
-    }
-    false
-}
-
-pub fn vec_all_match<T>(vec: &Vec<T>, predicate: &dyn Fn(&T) -> bool) -> bool {
-    for obj in vec {
-        if !predicate(obj) {
-            return false;
-        }
-    }
-    true
-}
-
 pub fn vec_none_match<T>(vec: &Vec<T>, predicate: &dyn Fn(&T) -> bool) -> bool {
     for obj in vec {
         if predicate(obj) {
@@ -141,3 +123,5 @@ pub fn get_progression_char(percent: u32) -> char {
         unreachable!()
     }
 }
+
+pub fn destroy<T>(_obj: T) {}
