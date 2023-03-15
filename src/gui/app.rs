@@ -77,7 +77,7 @@ impl TodoView {
             TodoView::Project(id) => (
                 get_completion_state_view(id, instance),
                 instance.get(id).unwrap().metadata.name.to_owned(),
-                style().checkbox,
+                style().gray,
             ),
         }
     }
@@ -283,7 +283,7 @@ impl TodoApplication {
                                 row_c.push(horizontal_space(view.0).into());
                                 row_c.append(&mut view.1);
                                 vec.push(
-                                    container(container(row(row_c)).max_width(650))
+                                    container(container(row(row_c)).max_width(1500))
                                         .align_x(alignment::Horizontal::Center)
                                         .width(Length::Fill)
                                         .into(),
@@ -382,7 +382,7 @@ impl TodoApplication {
             self_vec.push(
                 container(
                     button(
-                        appearance::icon('󰜄')
+                        appearance::icon('󰐕')
                             .style(theme::Text::Color(self.style_sheet().gray))
                             .size(25)
                             .width(Length::FillPortion(2)),
@@ -770,7 +770,15 @@ impl TodoState {
                 button(
                     appearance::icon(get_completion_state_view(&self.id, &app.instance))
                         .size(17.5)
-                        .style(theme::Text::Color(app.style_sheet().checkbox)),
+                        .style(theme::Text::Color(
+                            if app.instance.get_children_once(&self.id).is_empty()
+                                && !app.instance.get(&self.id).unwrap().completed
+                            {
+                                app.style_sheet().gray
+                            } else {
+                                app.style_sheet().checkbox
+                            },
+                        )),
                 )
                 .on_press(Message::TodoMessage(
                     self.id.to_owned(),
@@ -1068,13 +1076,13 @@ impl TodoState {
         self_vec.push(
             container(row(left_vec))
                 .align_x(alignment::Horizontal::Left)
-                .width(Length::Fill)
+                .width(Length::FillPortion(3))
                 .into(),
         );
         self_vec.push(
             container(row(right_vec))
                 .align_x(alignment::Horizontal::Right)
-                .width(Length::Fill)
+                .width(Length::FillPortion(1))
                 .into(),
         );
 
