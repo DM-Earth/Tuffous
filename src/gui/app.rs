@@ -13,7 +13,7 @@ use crate::{
     util,
 };
 
-use super::appearance;
+use super::{appearance, config};
 
 struct TodoApplication {
     pub instance: TodoInstance,
@@ -24,6 +24,7 @@ struct TodoApplication {
     pub view: TodoView,
     pub search_cache: String,
     pub search: bool,
+    pub config: config::ConfigInstance,
 }
 
 pub fn run() -> iced::Result {
@@ -366,11 +367,34 @@ impl TodoApplication {
             }
         }
 
+        self_vec.push(vertical_space(Length::Fill).into());
+
+        let mut controls_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        controls_vec.push(horizontal_space(7.5).into());
+
+        controls_vec.push(
+            container(
+                button(appearance::icon('󰔎').style(theme::Text::Color(self.style_sheet().gray)))
+                    .style(theme::Button::Text)
+                    .on_press(Message::UpdateConfig(ConfigMessage::ToggleDarkMode)),
+            )
+            .height(height)
+            .center_y()
+            .into(),
+        );
+
+        self_vec.push(
+            container(row(controls_vec).height(height))
+                .align_x(alignment::Horizontal::Left)
+                .into(),
+        );
+
+        self_vec.push(vertical_space(7.5).into());
+
         container(column(self_vec))
             .width(200)
             .height(Length::Fill)
             .align_x(alignment::Horizontal::Left)
-            .align_y(alignment::Vertical::Top)
             .into()
     }
 
@@ -484,11 +508,13 @@ impl Application for TodoApplication {
             view: TodoView::Today,
             search_cache: String::new(),
             search: false,
+            config: config::ConfigInstance::get(),
         };
         app.instance.read_all();
         app.instance.refresh();
         app.refresh_states();
         app.refresh_range();
+        app.config.write();
         (app, iced::Command::none())
     }
 
@@ -497,7 +523,11 @@ impl Application for TodoApplication {
     }
 
     fn theme(&self) -> Self::Theme {
-        Theme::Dark
+        if self.config.dark_theme {
+            Theme::Dark
+        } else {
+            Theme::Light
+        }
     }
 
     fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
@@ -656,6 +686,14 @@ impl Application for TodoApplication {
                 self.search_cache = string;
                 self.refresh_range();
             }
+            Message::UpdateConfig(msg) => {
+                match msg {
+                    ConfigMessage::ToggleDarkMode => {
+                        self.config.dark_theme = !self.config.dark_theme;
+                    }
+                }
+                self.config.write();
+            }
         };
         self.instance.write_all();
         self.refresh_states();
@@ -694,6 +732,12 @@ enum Message {
     SwitchCompleteFilter,
     ToggleSearch,
     CacheSearchContent(String),
+    UpdateConfig(ConfigMessage),
+}
+
+#[derive(Debug, Clone)]
+enum ConfigMessage {
+    ToggleDarkMode,
 }
 
 #[derive(Debug, Clone)]
