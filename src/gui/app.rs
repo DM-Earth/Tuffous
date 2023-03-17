@@ -32,6 +32,10 @@ pub fn run() -> iced::Result {
         window: window::Settings {
             size: (850, 700),
             min_size: Option::Some((600, 650)),
+            icon: Option::Some(
+                iced::window::Icon::from_file_data(include_bytes!("../../icon.png"), Option::None)
+                    .unwrap(),
+            ),
             ..window::Settings::default()
         },
         default_font: if appearance::FONT_BYTES.is_empty() {
@@ -426,10 +430,10 @@ impl TodoApplication {
             self_vec.push(horizontal_space(Length::FillPortion(2)).into());
         }
 
-        if !self
+        if self
             .view
             .default_complete_filter()
-            .eq(&TodoCompleteFilter::All)
+            .eq(&TodoCompleteFilter::NotComplete)
         {
             self_vec.push(
                 container(
