@@ -1,3 +1,6 @@
+mod appearance;
+mod config;
+
 use chrono::{Datelike, Local};
 use iced::{
     alignment, executor, theme,
@@ -7,13 +10,7 @@ use iced::{
     },
     window, Application, Color, Element, Length, Renderer, Settings, Theme,
 };
-
-use crate::{
-    base::{Todo, TodoInstance},
-    util,
-};
-
-use super::{appearance, config};
+use tuffous_core::{util, Todo, TodoInstance};
 
 struct TodoApplication {
     pub instance: TodoInstance,
@@ -27,13 +24,17 @@ struct TodoApplication {
     pub config: config::ConfigInstance,
 }
 
-pub fn run() -> iced::Result {
+fn main() {
+    let _ = run();
+}
+
+fn run() -> iced::Result {
     TodoApplication::run(Settings {
         window: window::Settings {
             size: (850, 700),
             min_size: Option::Some((600, 650)),
             icon: Option::Some(
-                window::icon::from_file_data(include_bytes!("../../icon.png"), None).unwrap(),
+                window::icon::from_file_data(include_bytes!("../icon.png"), None).unwrap(),
             ),
             ..window::Settings::default()
         },

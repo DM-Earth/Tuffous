@@ -1,13 +1,13 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    fs::{self, File},
-    hash::{Hash, Hasher},
-    io::{Read, Write},
-    path::Path,
-};
+use std::{fs::{File, self}, path::Path, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, io::{Write, Read}};
 
-use chrono::{Local, NaiveDate, NaiveDateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{NaiveDateTime, NaiveDate, Utc, Local};
+use serde::{Serialize, Deserialize};
+
+pub mod util;
+
+pub fn get_version() -> String {
+    String::from("0.1")
+}
 
 pub fn init_repo(path: &str) {
     create_path(&format!("{path}/.tuffous"));

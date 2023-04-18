@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 
 const ICONS: Font = Font::External {
     name: "Nerd Icons",
-    bytes: include_bytes!("../../fonts/nerd_font.ttf"),
+    bytes: include_bytes!("../fonts/nerd_font.ttf"),
 };
 
 pub static FONT_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {

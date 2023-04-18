@@ -6,17 +6,16 @@ use std::{
 use chrono::{Datelike, Local, NaiveDate, Timelike};
 use clap::{arg, Arg, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
-
-use crate::{
-    base::{self, Todo, TodoInstance},
-    get_version, gui,
+use tuffous_core::{
+    get_version,
     util::{parse_date, parse_date_and_time},
+    Todo, TodoInstance,
 };
 
-pub fn execute() {
+pub fn main() {
     match cli().get_matches().subcommand() {
         Some(("init", _)) => {
-            base::init_repo(".");
+            tuffous_core::init_repo(".");
         }
         Some(("new", matches)) => {
             let mut instance = TodoInstance::create(".");
@@ -102,9 +101,6 @@ pub fn execute() {
             cache.clean();
             cache.write();
         }
-        Some(("gui", _)) => {
-            gui::app::run().unwrap();
-        }
         _ => println!("Command don't exist!"),
     }
 }
@@ -157,7 +153,6 @@ fn cli() -> Command {
                 .args(filter_args()),
         )
         .subcommand(Command::new("cleancache").about("Clean cache"))
-        .subcommand(Command::new("gui").about("Open a GUI for this application (WIP)"))
 }
 
 fn edit_args() -> Vec<Arg> {
@@ -664,12 +659,10 @@ impl TodoCache {
     }
 
     pub fn write(&self) {
-        crate::util::destroy(
-            File::create("./.tuffous/cache.json")
-                .unwrap()
-                .write(serde_json::to_string(self).unwrap().as_bytes())
-                .unwrap(),
-        );
+        let _ = File::create("./.tuffous/cache.json")
+            .unwrap()
+            .write(serde_json::to_string(self).unwrap().as_bytes())
+            .unwrap();
     }
 
     pub fn clean(&mut self) {

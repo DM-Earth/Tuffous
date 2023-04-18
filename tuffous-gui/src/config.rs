@@ -27,7 +27,7 @@ impl ConfigInstance {
     }
 
     pub fn write(&self) {
-        crate::util::destroy(fs::write(
+        tuffous_core::util::destroy(fs::write(
             Self::get_path(),
             serde_json::to_string(&self).unwrap(),
         ));
