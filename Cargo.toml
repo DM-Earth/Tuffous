@@ -10,6 +10,6 @@ edition = "2021"
 chrono = { version = "*", features = ["serde"] }
 clap = { version = "*", features = ["derive"] }
 iced = {version = "*", features=["image"]}
-lazy_static = "*"
+once_cell = "*"
 serde = { version = "*", features = ["serde_derive", "derive"] }
 serde_json = "*"

@@ -3,28 +3,23 @@ use iced::{
     widget::{container, text, Text},
     Font, Theme,
 };
-
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 
 const ICONS: Font = Font::External {
     name: "Nerd Icons",
     bytes: include_bytes!("../../fonts/nerd_font.ttf"),
 };
 
-pub const NOTO_SANS: &[u8; 556216] = include_bytes!("../../fonts/noto_sans.ttf");
-
-lazy_static! {
-    pub static ref FONT_BYTES: Vec<u8> = {
-        let mut bytes = Vec::new();
-        let config = super::config::ConfigInstance::get();
-        for font in config.fonts {
-            if let Ok(mut b) = std::fs::read(font) {
-                bytes.append(&mut b);
-            }
+pub static FONT_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
+    let mut bytes = Vec::new();
+    let config = super::config::ConfigInstance::get();
+    for font in config.fonts {
+        if let Ok(mut b) = std::fs::read(font) {
+            bytes.append(&mut b);
         }
-        bytes
-    };
-}
+    }
+    bytes
+});
 
 pub fn icon(unicode: char) -> Text<'static> {
     text(unicode.to_string())

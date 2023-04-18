@@ -38,7 +38,7 @@ pub fn run() -> iced::Result {
             ..window::Settings::default()
         },
         default_font: if appearance::FONT_BYTES.is_empty() {
-            Some(appearance::NOTO_SANS)
+            None
         } else {
             Some(&appearance::FONT_BYTES)
         },
