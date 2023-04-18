@@ -32,10 +32,8 @@ fn run() -> iced::Result {
     TodoApplication::run(Settings {
         window: window::Settings {
             size: (850, 700),
-            min_size: Option::Some((600, 650)),
-            icon: Option::Some(
-                window::icon::from_file_data(include_bytes!("../icon.png"), None).unwrap(),
-            ),
+            min_size: Some((600, 650)),
+            icon: Some(window::icon::from_file_data(include_bytes!("../icon.png"), None).unwrap()),
             ..window::Settings::default()
         },
         default_font: if appearance::FONT_BYTES.is_empty() {
@@ -202,7 +200,7 @@ impl TodoView {
 
         match self {
             Self::Today => {
-                todo.time = Option::Some(Local::now().date_naive());
+                todo.time = Some(Local::now().date_naive());
             }
             Self::Project(project) => {
                 todo.dependents.push(*project);
@@ -249,7 +247,7 @@ impl TodoApplication {
             container(
                 appearance::icon(self.view.get_title(&self.instance, self.theme()).0)
                     .style(theme::Text::Color(self.style_sheet().gray))
-                    .size(100)
+                    .size(80)
                     .width(Length::Fill),
             )
             .center_x()
@@ -510,7 +508,7 @@ impl Application for TodoApplication {
         let mut app = TodoApplication {
             instance: TodoInstance::create(&flags.path),
             states: Vec::new(),
-            dep_selection: Option::None,
+            dep_selection: None,
             range: Vec::new(),
             complete_filter: TodoCompleteFilter::NotComplete,
             view: TodoView::Today,
@@ -572,7 +570,7 @@ impl Application for TodoApplication {
                             } else {
                                 state.time_cache = String::new();
                                 state.ddl_cache = String::new();
-                                self.dep_selection = Option::None;
+                                self.dep_selection = None;
                             }
                         }
                         if self.get_state(&id).unwrap().editing {
@@ -596,17 +594,17 @@ impl Application for TodoApplication {
                     }
                     EditMessage::Date(date) => {
                         if let Some(date_r) = util::parse_date(&date) {
-                            self.instance.get_mut(&id).unwrap().time = Option::Some(date_r);
+                            self.instance.get_mut(&id).unwrap().time = Some(date_r);
                         } else {
-                            self.instance.get_mut(&id).unwrap().time = Option::None;
+                            self.instance.get_mut(&id).unwrap().time = None;
                         }
                         self.get_state_mut(&id).unwrap().time_cache = date;
                     }
                     EditMessage::Deadline(ddl) => {
                         if let Some(ddl_r) = util::parse_date_and_time(&ddl) {
-                            self.instance.get_mut(&id).unwrap().deadline = Option::Some(ddl_r);
+                            self.instance.get_mut(&id).unwrap().deadline = Some(ddl_r);
                         } else {
-                            self.instance.get_mut(&id).unwrap().deadline = Option::None;
+                            self.instance.get_mut(&id).unwrap().deadline = None;
                         }
                         self.get_state_mut(&id).unwrap().ddl_cache = ddl;
                     }
@@ -619,10 +617,9 @@ impl Application for TodoApplication {
                     }
                     EditMessage::ToggleSelectChildren => {
                         if self.dep_selection.is_some() {
-                            self.dep_selection = Option::None;
+                            self.dep_selection = None;
                         } else {
-                            self.dep_selection =
-                                Option::Some((id, self.instance.get_children_once(&id)));
+                            self.dep_selection = Some((id, self.instance.get_children_once(&id)));
                         }
                     }
                 },
@@ -631,6 +628,14 @@ impl Application for TodoApplication {
                     state.expanded = !state.expanded;
                 }
                 TodoMessage::Delete => {
+                    match self.view {
+                        TodoView::Project(idd) => {
+                            if idd == id {
+                                self.view = TodoView::Today;
+                            }
+                        }
+                        _ => (),
+                    }
                     self.instance.remove(&id);
                     self.refresh_states();
                     self.refresh_range();
@@ -1056,7 +1061,13 @@ impl TodoState {
                             &(if todo.tags.is_empty() {
                                 String::new()
                             } else {
-                                format!("{} ", util::join_str_with(&todo.tags, " "))
+                                format!(
+                                    "{} ",
+                                    util::join_str_with(
+                                        todo.tags.iter().map(|e| e.as_str()).collect(),
+                                        " "
+                                    )
+                                )
                             })
                         )
                         .on_input(|input| {
@@ -1162,7 +1173,15 @@ impl TodoState {
         ));
         if self.expanded {
             for todo_id in app.instance.get_children_once(&self.id) {
-                if app.range.contains(&todo_id) {
+                if app.range.contains(&todo_id) && {
+                    let mut b = true;
+                    for c in app.instance.get_children(&self.id) {
+                        if app.instance.get_all_deps(&todo_id).contains(&c) {
+                            b = false;
+                        }
+                    }
+                    b
+                } {
                     for v in app.get_state(&todo_id).unwrap().get_view(app) {
                         vec.push((v.0 + 25, v.1));
                     }

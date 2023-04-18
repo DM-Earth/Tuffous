@@ -62,8 +62,8 @@ impl Todo {
             id: Self::create_id(&name, &time),
             completed: false,
             creation_date: time,
-            deadline: Option::None,
-            time: Option::None,
+            deadline: None,
+            time: None,
             dependents: Vec::new(),
             tags: Vec::new(),
             weight: 1,
@@ -93,18 +93,18 @@ impl Todo {
         if let Ok(f) = File::open(path) {
             file = f
         } else {
-            return Option::None;
+            return None;
         };
 
         let mut str = String::new();
         if file.read_to_string(&mut str).is_err() {
-            return Option::None;
+            return None;
         };
 
         if let Ok(x) = serde_json::from_str::<Todo>(&str) {
-            Option::Some(x)
+            Some(x)
         } else {
-            Option::None
+            None
         }
     }
 }

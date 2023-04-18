@@ -61,15 +61,15 @@ pub fn parse_date_and_time(string: &str) -> Option<NaiveDateTime> {
         format!("{}:00", temp_str),
     ] {
         if let Ok(r) = NaiveDateTime::parse_from_str(&variant, "%Y-%m-%d-%H:%M:%S") {
-            return Option::Some(r);
+            return Some(r);
         }
     }
 
     if string.to_lowercase().contains("now") {
-        return Option::Some(Local::now().naive_local());
+        return Some(Local::now().naive_local());
     }
 
-    Option::None
+    None
 }
 
 pub fn parse_date(string: &str) -> Option<NaiveDate> {
@@ -81,21 +81,25 @@ pub fn parse_date(string: &str) -> Option<NaiveDate> {
         format!("{}", temp_str),
     ] {
         if let Ok(r) = NaiveDate::parse_from_str(&variant, "%Y-%m-%d") {
-            return Option::Some(r);
+            return Some(r);
         }
     }
 
     if string.to_lowercase().contains("today") {
-        return Option::Some(Local::now().date_naive());
+        return Some(Local::now().date_naive());
     }
 
-    Option::None
+    None
 }
 
-pub fn join_str_with(vec: &Vec<String>, with: &str) -> String {
-    let mut string = String::new();
-    for str_temp in vec {
-        string = format!("{string}{with}{str_temp}")
+pub fn join_str_with(vec: Vec<&str>, with: &str) -> String {
+    if vec.is_empty() {
+        return String::new();
+    }
+    let mut string = vec.get(0).unwrap().to_string();
+    for i in 1..vec.len() {
+        string.push_str(with);
+        string.push_str(vec.get(i).unwrap())
     }
     string
 }

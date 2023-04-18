@@ -63,7 +63,7 @@ pub fn main() {
             scanner.instance.refresh();
             scanner.apply_filters(matches);
             if let Some(todo_id) = scanner.list(true).into_iter().next() {
-                cache.father = Option::Some(todo_id);
+                cache.father = Some(todo_id);
             }
             cache.process(&mut scanner.instance);
             cache.write();
@@ -204,17 +204,17 @@ fn process_edit_todo(matches: &ArgMatches, todo: &mut Todo) {
 
     if let Some(n) = matches.get_one::<String>("ddl") {
         if let Some(t) = parse_date_and_time(n) {
-            todo.deadline = Option::Some(t);
+            todo.deadline = Some(t);
         } else {
-            todo.deadline = Option::None;
+            todo.deadline = None;
         }
     }
 
     if let Some(n) = matches.get_one::<String>("date") {
         if let Some(d) = parse_date(n) {
-            todo.time = Option::Some(d);
+            todo.time = Some(d);
         } else {
-            todo.deadline = Option::None;
+            todo.deadline = None;
         }
     }
 
@@ -651,7 +651,7 @@ impl TodoCache {
             serde_json::from_str::<TodoCache>(&str).unwrap()
         } else {
             Self {
-                father: Option::None,
+                father: None,
                 child: Vec::new(),
             }
         }
@@ -665,7 +665,7 @@ impl TodoCache {
     }
 
     pub fn clean(&mut self) {
-        self.father = Option::None;
+        self.father = None;
         self.child = Vec::new();
     }
 
