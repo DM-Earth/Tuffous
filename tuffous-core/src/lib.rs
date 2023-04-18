@@ -48,8 +48,8 @@ pub struct TodoMetaData {
 }
 
 impl Todo {
-    pub fn get_id(&self) -> &u64 {
-        &self.id
+    pub fn get_id(&self) -> u64 {
+        self.id
     }
 
     fn create_id(name: &String, time: &NaiveDateTime) -> u64 {
@@ -179,47 +179,47 @@ impl TodoInstance {
         }
     }
 
-    pub fn get(&self, id: &u64) -> Option<&Todo> {
-        self.todos.iter().find(|&todo| todo.get_id().eq(id))
+    pub fn get(&self, id: u64) -> Option<&Todo> {
+        self.todos.iter().find(|&todo| todo.get_id() == id)
     }
 
-    pub fn get_mut(&mut self, id: &u64) -> Option<&mut Todo> {
-        self.todos.iter_mut().find(|todo| todo.get_id().eq(id))
+    pub fn get_mut(&mut self, id: u64) -> Option<&mut Todo> {
+        self.todos.iter_mut().find(|todo| todo.get_id() == id)
     }
 
     pub fn get_todos(&self) -> Vec<u64> {
         let mut vec = Vec::new();
         for todo in &self.todos {
-            vec.push(*todo.get_id());
+            vec.push(todo.get_id());
         }
         vec
     }
 
-    pub fn get_children(&self, id: &u64) -> Vec<u64> {
+    pub fn get_children(&self, id: u64) -> Vec<u64> {
         let mut vec = Vec::new();
         for todo in &self.todos {
-            if self.get_all_deps(&todo.id).contains(id) {
-                vec.push(*todo.get_id());
+            if self.get_all_deps(todo.id).contains(&id) {
+                vec.push(todo.get_id());
             }
         }
         vec
     }
 
-    pub fn get_children_once(&self, id: &u64) -> Vec<u64> {
+    pub fn get_children_once(&self, id: u64) -> Vec<u64> {
         let mut vec = Vec::new();
         for todo in &self.todos {
-            if todo.dependents.contains(id) {
-                vec.push(*todo.get_id());
+            if todo.dependents.contains(&id) {
+                vec.push(todo.get_id());
             }
         }
         vec
     }
 
-    pub fn child_able(&self, father: &u64, child: &u64) -> bool {
+    pub fn child_able(&self, father: u64, child: u64) -> bool {
         if father == child {
             return false;
         }
-        !(self.get_all_deps(father).contains(child) || self.get_children(father).contains(child))
+        !(self.get_all_deps(father).contains(&child) || self.get_children(father).contains(&child))
     }
 
     pub fn replace(&mut self, replacement: Todo) -> bool {
@@ -236,24 +236,24 @@ impl TodoInstance {
         true
     }
 
-    pub fn child(&mut self, father: &u64, child: &u64) {
+    pub fn child(&mut self, father: u64, child: u64) {
         if !self.child_able(father, child) {
             panic!("Can't child the target child")
         }
 
         let target = &mut self.get_mut(child).unwrap();
-        if !target.dependents.contains(father) {
-            target.dependents.push(*father);
+        if !target.dependents.contains(&father) {
+            target.dependents.push(father);
         }
     }
 
-    pub fn get_all_deps(&self, id: &u64) -> Vec<u64> {
+    pub fn get_all_deps(&self, id: u64) -> Vec<u64> {
         let mut vec = Vec::new();
         if let Some(target) = self.get(id) {
             for dep in &target.dependents {
-                if let Some(todo) = self.get(dep) {
-                    vec.push(*todo.get_id());
-                    for t in self.get_all_deps(dep) {
+                if let Some(todo) = self.get(*dep) {
+                    vec.push(todo.get_id());
+                    for t in self.get_all_deps(*dep) {
                         vec.push(t);
                     }
                 }
@@ -267,7 +267,7 @@ impl TodoInstance {
     pub fn refresh(&mut self) {
         let todos = self.get_todos();
         for todo_id in &todos {
-            if let Some(todo) = self.get_mut(todo_id) {
+            if let Some(todo) = self.get_mut(*todo_id) {
                 // Remove broken deps
                 loop {
                     let mut rm = 0;
@@ -297,12 +297,12 @@ impl TodoInstance {
         }
     }
 
-    pub fn remove(&mut self, id: &u64) {
+    pub fn remove(&mut self, id: u64) {
         let mut rm = 0;
         let mut remove = false;
 
         for todo in self.todos.iter().enumerate() {
-            if todo.1.get_id().eq(id) {
+            if todo.1.get_id() == id {
                 rm = todo.0;
                 remove = true;
             }
@@ -314,7 +314,7 @@ impl TodoInstance {
         fs::remove_file(format!("{}/.tuffous/todos/{}.json", self.path, id)).unwrap();
     }
 
-    pub fn get_weight(&self, id: &u64, completed: bool) -> u32 {
+    pub fn get_weight(&self, id: u64, completed: bool) -> u32 {
         let mut base = 0;
         if self.get_children_once(id).is_empty() && (self.get(id).unwrap().completed || !completed)
         {
@@ -322,8 +322,8 @@ impl TodoInstance {
         }
 
         for child in self.get_children_once(id) {
-            if self.get(&child).unwrap().completed || !completed {
-                base += self.get_weight(&child, completed);
+            if self.get(child).unwrap().completed || !completed {
+                base += self.get_weight(child, completed);
             }
         }
 

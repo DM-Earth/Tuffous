@@ -38,7 +38,7 @@ pub fn main() {
             scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
-                if let Some(todo) = scanner.instance.get_mut(&todo_id) {
+                if let Some(todo) = scanner.instance.get_mut(todo_id) {
                     process_edit_todo(matches, todo);
                 }
             }
@@ -50,7 +50,7 @@ pub fn main() {
             scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
-                if let Some(todo) = scanner.instance.get_mut(&todo_id) {
+                if let Some(todo) = scanner.instance.get_mut(todo_id) {
                     todo.completed = true;
                 }
             }
@@ -89,7 +89,7 @@ pub fn main() {
             scanner.instance.refresh();
             scanner.apply_filters(matches);
             for todo_id in scanner.list(true) {
-                scanner.instance.remove(&todo_id);
+                scanner.instance.remove(todo_id);
             }
             cache.clean();
             cache.write();
@@ -257,18 +257,18 @@ impl TodoScanner {
         self.cache.clear();
         for todo_id in self.instance.get_todos() {
             if !self.cache.contains(&todo_id)
-                && Self::match_filters(matches, self.instance.get(&todo_id).unwrap(), true)
+                && Self::match_filters(matches, self.instance.get(todo_id).unwrap(), true)
             {
                 self.cache.push(todo_id);
-                for father_todo_id in self.instance.get_all_deps(&todo_id) {
+                for father_todo_id in self.instance.get_all_deps(todo_id) {
                     if !self.cache.contains(&father_todo_id) {
                         self.cache.push(father_todo_id);
                     }
                 }
 
-                for child_todo_id in self.instance.get_children(&todo_id) {
+                for child_todo_id in self.instance.get_children(todo_id) {
                     if !self.cache.contains(&child_todo_id)
-                        && Self::match_filters(matches, self.instance.get(&todo_id).unwrap(), false)
+                        && Self::match_filters(matches, self.instance.get(todo_id).unwrap(), false)
                     {
                         self.cache.push(child_todo_id);
                     }
@@ -424,7 +424,7 @@ impl TodoScanner {
         let mut vec = Vec::new();
 
         for todo_id in &self.cache {
-            let todo = self.instance.get(todo_id).unwrap();
+            let todo = self.instance.get(*todo_id).unwrap();
             let mut has_dep = false;
             for dep in &todo.dependents {
                 if self.cache.contains(dep) {
@@ -434,7 +434,7 @@ impl TodoScanner {
             }
 
             if !has_dep {
-                vec.append(&mut self.as_tree(todo_id, &self.cache));
+                vec.append(&mut self.as_tree(*todo_id, &self.cache));
             }
         }
 
@@ -469,12 +469,12 @@ impl TodoScanner {
         }
     }
 
-    fn as_tree(&self, id: &u64, range: &Vec<u64>) -> Vec<FormattedTodo> {
+    fn as_tree(&self, id: u64, range: &Vec<u64>) -> Vec<FormattedTodo> {
         let todo = self.instance.get(id).unwrap();
         let mut vec = Vec::new();
 
         vec.push(FormattedTodo::of(
-            *id,
+            id,
             format!(
                 "{}{}",
                 format_todo(todo),
@@ -491,7 +491,7 @@ impl TodoScanner {
         ));
         for child in self.instance.get_children_once(id) {
             if range.contains(&child) {
-                for mut i in self.as_tree(&child, range) {
+                for mut i in self.as_tree(child, range) {
                     i.string = format!("   {}", i.string);
                     vec.push(i);
                 }
@@ -673,10 +673,10 @@ impl TodoCache {
         if !self.child.is_empty() {
             if let Some(father) = &self.father {
                 for child in &self.child {
-                    if instance.get(child).unwrap().dependents.contains(father) {
+                    if instance.get(*child).unwrap().dependents.contains(father) {
                         let mut rm = 0;
                         for dep in instance
-                            .get_mut(child)
+                            .get_mut(*child)
                             .unwrap()
                             .dependents
                             .iter()
@@ -686,9 +686,9 @@ impl TodoCache {
                                 rm = dep.0;
                             }
                         }
-                        instance.get_mut(child).unwrap().dependents.remove(rm);
+                        instance.get_mut(*child).unwrap().dependents.remove(rm);
                     } else {
-                        instance.get_mut(child).unwrap().dependents.push(*father);
+                        instance.get_mut(*child).unwrap().dependents.push(*father);
                     }
                 }
                 self.clean()

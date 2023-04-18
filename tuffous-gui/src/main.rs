@@ -82,8 +82,8 @@ impl TodoView {
             TodoView::Logbook => ('󱓵', String::from("Logbook"), style().green),
             TodoView::All => ('󰾍', String::from("All"), style().gray),
             TodoView::Project(id) => (
-                get_completion_state_view(id, instance),
-                instance.get(id).unwrap().metadata.name.to_owned(),
+                get_completion_state_view(*id, instance),
+                instance.get(*id).unwrap().metadata.name.to_owned(),
                 style().gray,
             ),
         }
@@ -95,7 +95,7 @@ impl TodoView {
         complete: &TodoCompleteFilter,
         keywords: &Vec<String>,
     ) -> Vec<u64> {
-        let get_relatives = |id: &u64| {
+        let get_relatives = |id: u64| {
             let mut vec = Vec::new();
             for father in instance.get_all_deps(id) {
                 if !vec.contains(&father) {
@@ -131,8 +131,8 @@ impl TodoView {
                     b
                 })
             {
-                if !vec.contains(todo.get_id()) {
-                    vec.push(*todo.get_id());
+                if !vec.contains(&todo.get_id()) {
+                    vec.push(todo.get_id());
                 }
 
                 for father in get_relatives(todo.get_id()) {
@@ -142,7 +142,7 @@ impl TodoView {
                 }
 
                 for child in instance.get_children(todo.get_id()) {
-                    if complete.test(instance.get(&child).unwrap()) && !vec.contains(&child) {
+                    if complete.test(instance.get(child).unwrap()) && !vec.contains(&child) {
                         vec.push(child);
                     }
                 }
@@ -156,7 +156,7 @@ impl TodoView {
         vec
     }
 
-    pub fn test(&self, id: &u64, instance: &TodoInstance) -> bool {
+    pub fn test(&self, id: u64, instance: &TodoInstance) -> bool {
         let todo = instance.get(id).unwrap();
         match self {
             TodoView::Today => {
@@ -181,7 +181,7 @@ impl TodoView {
             TodoView::Logbook => todo.completed,
             TodoView::All => true,
             TodoView::Project(project_id) => {
-                instance.get_children(project_id).contains(id) || id.eq(project_id)
+                instance.get_children(*project_id).contains(&id) || &id == project_id
             }
         }
     }
@@ -218,12 +218,12 @@ impl TodoView {
 }
 
 impl TodoApplication {
-    pub fn get_state(&self, id: &u64) -> Option<&TodoState> {
-        self.states.iter().find(|&state| state.id.eq(id))
+    pub fn get_state(&self, id: u64) -> Option<&TodoState> {
+        self.states.iter().find(|&state| state.id == id)
     }
 
-    pub fn get_state_mut(&mut self, id: &u64) -> Option<&mut TodoState> {
-        self.states.iter_mut().find(|state| state.id.eq(id))
+    pub fn get_state_mut(&mut self, id: u64) -> Option<&mut TodoState> {
+        self.states.iter_mut().find(|state| state.id == id)
     }
 
     pub fn refresh_states(&mut self) {
@@ -232,7 +232,7 @@ impl TodoApplication {
         });
 
         for todo in &self.instance.todos {
-            if util::vec_none_match(&self.states, &|state| state.id == *todo.get_id()) {
+            if util::vec_none_match(&self.states, &|state| state.id == todo.get_id()) {
                 self.states.push(TodoState::new(todo));
             }
         }
@@ -258,8 +258,8 @@ impl TodoApplication {
             let mut todos = Vec::new();
             for todo_id in self.instance.get_todos() {
                 todos.push((
-                    self.instance.get(&todo_id).unwrap(),
-                    self.get_state(&todo_id).unwrap(),
+                    self.instance.get(todo_id).unwrap(),
+                    self.get_state(todo_id).unwrap(),
                 ));
             }
 
@@ -283,7 +283,7 @@ impl TodoApplication {
 
                     vec.push(horizontal_space(35).into());
                     for todo in &self.instance.todos {
-                        if todo.dependents.is_empty() && self.range.contains(todo.get_id()) {
+                        if todo.dependents.is_empty() && self.range.contains(&todo.get_id()) {
                             for view in &mut self.get_state(todo.get_id()).unwrap().get_view(self) {
                                 let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
                                 row_c.push(horizontal_space(view.0).into());
@@ -358,7 +358,7 @@ impl TodoApplication {
             for todo in &self.instance.todos {
                 for tag in &todo.tags {
                     if !todo.completed && tag.to_lowercase().eq("pinned") {
-                        pinned.push(*todo.get_id());
+                        pinned.push(todo.get_id());
                         break;
                     }
                 }
@@ -541,23 +541,23 @@ impl Application for TodoApplication {
         match message {
             Message::TodoMessage(id, msg) => match msg {
                 TodoMessage::ToggleComplete => {
-                    let mut todo = self.instance.get_mut(&id).unwrap();
+                    let mut todo = self.instance.get_mut(id).unwrap();
                     todo.completed = !todo.completed;
                     self.refresh_range();
                 }
                 TodoMessage::Edit(edit_msg) => match edit_msg {
                     EditMessage::Name(name) => {
-                        self.instance.get_mut(&id).unwrap().metadata.name = name
+                        self.instance.get_mut(id).unwrap().metadata.name = name
                     }
                     EditMessage::Details(details) => {
-                        self.instance.get_mut(&id).unwrap().metadata.details = details
+                        self.instance.get_mut(id).unwrap().metadata.details = details
                     }
                     EditMessage::ToggleEdit => {
                         {
-                            let todo = self.instance.get(&id).unwrap();
+                            let todo = self.instance.get(id).unwrap();
                             let time_o = todo.time;
                             let ddl_o = todo.deadline;
-                            let mut state = self.get_state_mut(&id).unwrap();
+                            let mut state = self.get_state_mut(id).unwrap();
                             state.editing = !state.editing;
                             if state.editing {
                                 if let Some(time) = time_o {
@@ -573,17 +573,17 @@ impl Application for TodoApplication {
                                 self.dep_selection = None;
                             }
                         }
-                        if self.get_state(&id).unwrap().editing {
+                        if self.get_state(id).unwrap().editing {
                             for state in &mut self.states {
-                                if !state.id.eq(&id) {
+                                if !state.id == id {
                                     state.editing = false;
                                 }
                             }
                         }
 
                         {
-                            if !self.get_state(&id).unwrap().editing {
-                                let mut todo = self.instance.get_mut(&id).unwrap();
+                            if !self.get_state(id).unwrap().editing {
+                                let mut todo = self.instance.get_mut(id).unwrap();
                                 if todo.metadata.name.is_empty() {
                                     todo.metadata.name = String::from("untitled todo");
                                 }
@@ -594,22 +594,22 @@ impl Application for TodoApplication {
                     }
                     EditMessage::Date(date) => {
                         if let Some(date_r) = util::parse_date(&date) {
-                            self.instance.get_mut(&id).unwrap().time = Some(date_r);
+                            self.instance.get_mut(id).unwrap().time = Some(date_r);
                         } else {
-                            self.instance.get_mut(&id).unwrap().time = None;
+                            self.instance.get_mut(id).unwrap().time = None;
                         }
-                        self.get_state_mut(&id).unwrap().time_cache = date;
+                        self.get_state_mut(id).unwrap().time_cache = date;
                     }
                     EditMessage::Deadline(ddl) => {
                         if let Some(ddl_r) = util::parse_date_and_time(&ddl) {
-                            self.instance.get_mut(&id).unwrap().deadline = Some(ddl_r);
+                            self.instance.get_mut(id).unwrap().deadline = Some(ddl_r);
                         } else {
-                            self.instance.get_mut(&id).unwrap().deadline = None;
+                            self.instance.get_mut(id).unwrap().deadline = None;
                         }
-                        self.get_state_mut(&id).unwrap().ddl_cache = ddl;
+                        self.get_state_mut(id).unwrap().ddl_cache = ddl;
                     }
                     EditMessage::Tags(tags) => {
-                        let todo = self.instance.get_mut(&id).unwrap();
+                        let todo = self.instance.get_mut(id).unwrap();
                         todo.tags.clear();
                         for tag in tags.split_whitespace() {
                             todo.tags.push(tag.to_string());
@@ -619,12 +619,12 @@ impl Application for TodoApplication {
                         if self.dep_selection.is_some() {
                             self.dep_selection = None;
                         } else {
-                            self.dep_selection = Some((id, self.instance.get_children_once(&id)));
+                            self.dep_selection = Some((id, self.instance.get_children_once(id)));
                         }
                     }
                 },
                 TodoMessage::ExpandToggle => {
-                    let state = self.get_state_mut(&id).unwrap();
+                    let state = self.get_state_mut(id).unwrap();
                     state.expanded = !state.expanded;
                 }
                 TodoMessage::Delete => {
@@ -636,7 +636,7 @@ impl Application for TodoApplication {
                         }
                         _ => (),
                     }
-                    self.instance.remove(&id);
+                    self.instance.remove(id);
                     self.refresh_states();
                     self.refresh_range();
                 }
@@ -644,12 +644,12 @@ impl Application for TodoApplication {
                     if let Some((father_id, child_vec)) = &mut self.dep_selection {
                         if child_vec.contains(&id) {
                             util::remove_from_vec(
-                                &mut self.instance.get_mut(&id).unwrap().dependents,
+                                &mut self.instance.get_mut(id).unwrap().dependents,
                                 father_id,
                             );
                             util::remove_from_vec(child_vec, &id);
                         } else {
-                            self.instance.child(father_id, &id);
+                            self.instance.child(*father_id, id);
                             child_vec.push(id);
                         }
                     }
@@ -665,8 +665,8 @@ impl Application for TodoApplication {
             Message::CreateTodo => {
                 let mut todo = Todo::create(String::from("untitled todo"));
                 self.view.process_todo(&mut todo);
-                let id = *todo.get_id();
-                if !self.instance.get_todos().contains(todo.get_id()) {
+                let id = todo.get_id();
+                if !self.instance.get_todos().contains(&id) {
                     self.instance.todos.push(todo);
                 }
                 self.refresh_states();
@@ -784,7 +784,7 @@ struct TodoState {
 impl TodoState {
     pub fn new(todo: &Todo) -> Self {
         TodoState {
-            id: *todo.get_id(),
+            id: todo.get_id(),
             editing: false,
             expanded: true,
             time_cache: String::new(),
@@ -798,9 +798,9 @@ impl TodoState {
     ) -> Vec<(u16, Vec<Element<'_, Message, Renderer>>)> {
         let height = 28.0;
 
-        let todo = app.instance.get(&self.id).unwrap();
+        let todo = app.instance.get(self.id).unwrap();
         let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-        if app.instance.get_children_once(&self.id).is_empty() {
+        if app.instance.get_children_once(self.id).is_empty() {
             self_vec.push(horizontal_space(25).into());
         } else {
             self_vec.push(
@@ -826,11 +826,11 @@ impl TodoState {
         self_vec.push(
             container(
                 button(
-                    appearance::icon(get_completion_state_view(&self.id, &app.instance))
+                    appearance::icon(get_completion_state_view(self.id, &app.instance))
                         .size(17.5)
                         .style(theme::Text::Color(
-                            if app.instance.get_children_once(&self.id).is_empty()
-                                && !app.instance.get(&self.id).unwrap().completed
+                            if app.instance.get_children_once(self.id).is_empty()
+                                && !app.instance.get(self.id).unwrap().completed
                             {
                                 app.style_sheet().gray
                             } else {
@@ -959,7 +959,7 @@ impl TodoState {
             }
 
             if let Some((father_id, child_vec)) = &app.dep_selection {
-                if app.instance.child_able(father_id, &self.id) || child_vec.contains(&self.id) {
+                if app.instance.child_able(*father_id, self.id) || child_vec.contains(&self.id) {
                     right_vec.push(horizontal_space(7.5).into());
                     right_vec.push(
                         container(
@@ -1172,17 +1172,17 @@ impl TodoState {
             },
         ));
         if self.expanded {
-            for todo_id in app.instance.get_children_once(&self.id) {
+            for todo_id in app.instance.get_children_once(self.id) {
                 if app.range.contains(&todo_id) && {
                     let mut b = true;
-                    for c in app.instance.get_children(&self.id) {
-                        if app.instance.get_all_deps(&todo_id).contains(&c) {
+                    for c in app.instance.get_children(self.id) {
+                        if app.instance.get_all_deps(todo_id).contains(&c) {
                             b = false;
                         }
                     }
                     b
                 } {
-                    for v in app.get_state(&todo_id).unwrap().get_view(app) {
+                    for v in app.get_state(todo_id).unwrap().get_view(app) {
                         vec.push((v.0 + 25, v.1));
                     }
                 }
@@ -1192,7 +1192,7 @@ impl TodoState {
     }
 }
 
-fn get_completion_state_view(id: &u64, instance: &TodoInstance) -> char {
+fn get_completion_state_view(id: u64, instance: &TodoInstance) -> char {
     let todo = instance.get(id).unwrap();
     if todo.completed {
         if instance.get_children_once(id).is_empty() {
