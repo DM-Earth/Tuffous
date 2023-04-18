@@ -33,8 +33,7 @@ pub fn run() -> iced::Result {
             size: (850, 700),
             min_size: Option::Some((600, 650)),
             icon: Option::Some(
-                iced::window::Icon::from_file_data(include_bytes!("../../icon.png"), Option::None)
-                    .unwrap(),
+                window::icon::from_file_data(include_bytes!("../../icon.png"), None).unwrap(),
             ),
             ..window::Settings::default()
         },
@@ -273,10 +272,9 @@ impl TodoApplication {
                         vec.push(horizontal_space(35).into());
                         vec.push(
                             container(
-                                text_input("Search", &self.search_cache, |s| {
-                                    Message::CacheSearchContent(s)
-                                })
-                                .width(360),
+                                text_input("Search", &self.search_cache)
+                                    .on_input(|s| Message::CacheSearchContent(s))
+                                    .width(360),
                             )
                             .center_x()
                             .width(Length::Fill)
@@ -980,13 +978,14 @@ impl TodoState {
                 row!(
                     container(appearance::icon('󰑕')).height(height).center_y(),
                     container(
-                        text_input("Input title here", &todo.metadata.name, |input| {
-                            Message::TodoMessage(
-                                self.id.to_owned(),
-                                TodoMessage::Edit(EditMessage::Name(input)),
-                            )
-                        })
-                        .width(350)
+                        text_input("Input title here", &todo.metadata.name)
+                            .on_input(|input| {
+                                Message::TodoMessage(
+                                    self.id.to_owned(),
+                                    TodoMessage::Edit(EditMessage::Name(input)),
+                                )
+                            })
+                            .width(350)
                     )
                     .height(height)
                     .center_y()
@@ -997,13 +996,14 @@ impl TodoState {
                 row!(
                     container(appearance::icon('󰟃')).height(height).center_y(),
                     container(
-                        text_input("Input details here", &todo.metadata.details, |input| {
-                            Message::TodoMessage(
-                                self.id.to_owned(),
-                                TodoMessage::Edit(EditMessage::Details(input)),
-                            )
-                        })
-                        .width(350)
+                        text_input("Input details here", &todo.metadata.details)
+                            .on_input(|input| {
+                                Message::TodoMessage(
+                                    self.id.to_owned(),
+                                    TodoMessage::Edit(EditMessage::Details(input)),
+                                )
+                            })
+                            .width(350)
                     )
                     .height(height)
                     .center_y()
@@ -1014,13 +1014,14 @@ impl TodoState {
                 row!(
                     container(appearance::icon('󰃯')).height(height).center_y(),
                     container(
-                        text_input("Input date here", &self.time_cache, |input| {
-                            Message::TodoMessage(
-                                self.id.to_owned(),
-                                TodoMessage::Edit(EditMessage::Date(input)),
-                            )
-                        })
-                        .width(350)
+                        text_input("Input date here", &self.time_cache)
+                            .on_input(|input| {
+                                Message::TodoMessage(
+                                    self.id.to_owned(),
+                                    TodoMessage::Edit(EditMessage::Date(input)),
+                                )
+                            })
+                            .width(350)
                     )
                     .height(height)
                     .center_y()
@@ -1031,13 +1032,14 @@ impl TodoState {
                 row!(
                     container(appearance::icon('󰈼')),
                     container(
-                        text_input("Input deadline here", &self.ddl_cache, |input| {
-                            Message::TodoMessage(
-                                self.id.to_owned(),
-                                TodoMessage::Edit(EditMessage::Deadline(input)),
-                            )
-                        })
-                        .width(350)
+                        text_input("Input deadline here", &self.ddl_cache)
+                            .on_input(|input| {
+                                Message::TodoMessage(
+                                    self.id.to_owned(),
+                                    TodoMessage::Edit(EditMessage::Deadline(input)),
+                                )
+                            })
+                            .width(350)
                     )
                     .height(height)
                     .center_y()
@@ -1054,14 +1056,14 @@ impl TodoState {
                                 String::new()
                             } else {
                                 format!("{} ", util::join_str_with(&todo.tags, " "))
-                            }),
-                            |input| {
-                                Message::TodoMessage(
-                                    self.id.to_owned(),
-                                    TodoMessage::Edit(EditMessage::Tags(input)),
-                                )
-                            }
+                            })
                         )
+                        .on_input(|input| {
+                            Message::TodoMessage(
+                                self.id.to_owned(),
+                                TodoMessage::Edit(EditMessage::Tags(input)),
+                            )
+                        })
                         .width(350)
                     )
                     .height(height)

@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 # array-concat = "0.5.2"
-chrono = { version = "0.4.23", features = ["serde"] }
-clap = { version = "4.1.4", features = ["derive"] }
-iced = {version = "0.8.0", features=["image_rs"]}
-lazy_static = "1.4.0"
-serde = { version = "1.0.154", features = ["serde_derive", "derive"] }
-serde_json = "1.0.94"
+chrono = { version = "*", features = ["serde"] }
+clap = { version = "*", features = ["derive"] }
+iced = {version = "*", features=["image"]}
+lazy_static = "*"
+serde = { version = "*", features = ["serde_derive", "derive"] }
+serde_json = "*"
