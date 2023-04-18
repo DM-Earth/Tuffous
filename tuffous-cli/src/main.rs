@@ -1,11 +1,10 @@
+use chrono::{Datelike, Local, NaiveDate, Timelike};
+use clap::{arg, Arg, ArgMatches, Command};
+use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{Read, Write},
 };
-
-use chrono::{Datelike, Local, NaiveDate, Timelike};
-use clap::{arg, Arg, ArgMatches, Command};
-use serde::{Deserialize, Serialize};
 use tuffous_core::{
     get_version,
     util::{parse_date, parse_date_and_time},

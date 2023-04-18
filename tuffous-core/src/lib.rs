@@ -1,3 +1,5 @@
+use chrono::{Local, NaiveDate, NaiveDateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::hash_map::DefaultHasher,
     fs::{self, File},
@@ -5,9 +7,6 @@ use std::{
     io::{Read, Write},
     path::Path,
 };
-
-use chrono::{Local, NaiveDate, NaiveDateTime, Utc};
-use serde::{Deserialize, Serialize};
 
 pub mod util;
 

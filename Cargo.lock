@@ -2640,7 +2640,7 @@ checksum = "0609f771ad9c6155384897e1df4d948e692667cc0588548b68eb44d052b27633"
 
 [[package]]
 name = "tuffous-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "clap",
@@ -2651,7 +2651,7 @@ dependencies = [
 
 [[package]]
 name = "tuffous-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -2660,7 +2660,7 @@ dependencies = [
 
 [[package]]
 name = "tuffous-gui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "iced",
