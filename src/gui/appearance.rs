@@ -29,7 +29,7 @@ pub fn icon(unicode: char) -> Text<'static> {
         .size(20)
 }
 
-pub struct TagStyle {}
+pub struct TagStyle;
 
 impl container::StyleSheet for TagStyle {
     type Style = Theme;
