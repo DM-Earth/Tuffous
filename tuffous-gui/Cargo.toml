@@ -3,6 +3,10 @@ name = "tuffous-gui"
 version = "0.2.0"
 edition = "2021"
 
+[[bin]]
+name = "tuffousgui"
+path = "src/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -12,3 +16,4 @@ once_cell = "*"
 serde = { version = "*", features = ["serde_derive", "derive"] }
 serde_json = "*"
 tuffous-core = { version = "*", path = "../tuffous-core" }
+
