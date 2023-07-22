@@ -288,9 +288,11 @@ impl TodoInstance {
                 }
 
                 // Correct time
-                if let Some(date) = &todo.time {
-                    if date < &Local::now().date_naive() {
-                        todo.time = Some(Local::now().date_naive());
+                if !todo.completed {
+                    if let Some(date) = &todo.time {
+                        if date < &Local::now().date_naive() {
+                            todo.time = Some(Local::now().date_naive());
+                        }
                     }
                 }
             }
