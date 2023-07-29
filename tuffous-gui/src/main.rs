@@ -24,11 +24,7 @@ struct TodoApplication {
     pub config: config::ConfigInstance,
 }
 
-fn main() {
-    let _ = run();
-}
-
-fn run() -> iced::Result {
+fn main() -> iced::Result {
     TodoApplication::run(Settings {
         window: window::Settings {
             size: (850, 700),
@@ -36,11 +32,7 @@ fn run() -> iced::Result {
             icon: Some(window::icon::from_file_data(include_bytes!("../icon.png"), None).unwrap()),
             ..window::Settings::default()
         },
-        default_font: if appearance::FONT_BYTES.is_empty() {
-            None
-        } else {
-            Some(&appearance::FONT_BYTES)
-        },
+        default_font: appearance::FONT.as_ref().copied().unwrap_or_default(),
         ..Settings::default()
     })
 }
@@ -505,6 +497,7 @@ impl Application for TodoApplication {
 
     fn new(flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
         let config = config::ConfigInstance::get();
+
         let mut app = TodoApplication {
             instance: TodoInstance::create(&flags.path),
             states: Vec::new(),
@@ -516,12 +509,18 @@ impl Application for TodoApplication {
             search: false,
             config,
         };
+
         app.instance.read_all();
         app.instance.refresh();
         app.refresh_states();
         app.refresh_range();
         app.config.write();
-        (app, iced::Command::none())
+
+        (
+            app,
+            iced::font::load(include_bytes!("../fonts/nerd_font.ttf").as_slice())
+                .map(|e| Message::LoadFont(e)),
+        )
     }
 
     fn title(&self) -> String {
@@ -541,7 +540,7 @@ impl Application for TodoApplication {
         match message {
             Message::TodoMessage(id, msg) => match msg {
                 TodoMessage::ToggleComplete => {
-                    let mut todo = self.instance.get_mut(id).unwrap();
+                    let todo = self.instance.get_mut(id).unwrap();
                     todo.completed = !todo.completed;
                     self.refresh_range();
                 }
@@ -557,7 +556,7 @@ impl Application for TodoApplication {
                             let todo = self.instance.get(id).unwrap();
                             let time_o = todo.time;
                             let ddl_o = todo.deadline;
-                            let mut state = self.get_state_mut(id).unwrap();
+                            let state = self.get_state_mut(id).unwrap();
                             state.editing = !state.editing;
                             if state.editing {
                                 if let Some(time) = time_o {
@@ -583,7 +582,7 @@ impl Application for TodoApplication {
 
                         {
                             if !self.get_state(id).unwrap().editing {
-                                let mut todo = self.instance.get_mut(id).unwrap();
+                                let todo = self.instance.get_mut(id).unwrap();
                                 if todo.metadata.name.is_empty() {
                                     todo.metadata.name = String::from("untitled todo");
                                 }
@@ -707,7 +706,9 @@ impl Application for TodoApplication {
                 }
                 self.config.write();
             }
+            _ => (),
         };
+
         self.instance.write_all();
         self.refresh_states();
         iced::Command::none()
@@ -746,6 +747,7 @@ enum Message {
     ToggleSearch,
     CacheSearchContent(String),
     UpdateConfig(ConfigMessage),
+    LoadFont(Result<(), iced::font::Error>),
 }
 
 #[derive(Debug, Clone)]

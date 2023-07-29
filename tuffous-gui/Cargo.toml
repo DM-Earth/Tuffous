@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 chrono = { version = "*", features = ["serde"] }
-iced = { version = "*", features= ["image"] }
+iced = { version = "0.10", features= ["image"] }
 once_cell = "*"
 serde = { version = "*", features = ["serde_derive", "derive"] }
 serde_json = "*"

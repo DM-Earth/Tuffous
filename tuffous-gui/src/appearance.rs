@@ -5,20 +5,16 @@ use iced::{
 };
 use once_cell::sync::Lazy;
 
-const ICONS: Font = Font::External {
-    name: "Nerd Icons",
-    bytes: include_bytes!("../fonts/nerd_font.ttf"),
-};
+const ICONS: Font = Font::with_name("Symbols Nerd Font");
 
-pub static FONT_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
-    let mut bytes = Vec::new();
+pub static FONT: Lazy<Option<Font>> = Lazy::new(|| {
     let config = super::config::ConfigInstance::get();
-    for font in config.fonts {
-        if let Ok(mut b) = std::fs::read(font) {
-            bytes.append(&mut b);
-        }
+
+    if let Some(font) = config.fonts.get(0) {
+        Some(Font::with_name(Box::leak(Box::new(font.to_string()))))
+    } else {
+        None
     }
-    bytes
 });
 
 pub fn icon(unicode: char) -> Text<'static> {
@@ -38,7 +34,7 @@ impl container::StyleSheet for TagStyle {
         container::Appearance {
             text_color: Some(StyleSheet::from_theme(style).gray),
             background: None,
-            border_radius: 100.0,
+            border_radius: 100.0.into(),
             border_width: 1.0,
             border_color: StyleSheet::from_theme(style).gray,
         }
