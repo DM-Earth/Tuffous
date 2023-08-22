@@ -9,7 +9,7 @@ pub struct ConfigInstance {
 
 impl ConfigInstance {
     pub fn get() -> Self {
-        if let Some(c) = Self::read_from_file(Self::get_path()) {
+        if let Some(c) = Self::read_from_file(Self::path()) {
             c
         } else {
             Self::default()
@@ -26,13 +26,10 @@ impl ConfigInstance {
     }
 
     pub fn write(&self) {
-        tuffous_core::util::destroy(fs::write(
-            Self::get_path(),
-            serde_json::to_string(&self).unwrap(),
-        ));
+        let _ = fs::write(Self::path(), serde_json::to_string(&self).unwrap());
     }
 
-    fn get_path() -> String {
+    fn path() -> String {
         String::from("./.tuffous/config_gui.json")
     }
 }

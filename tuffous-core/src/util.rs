@@ -30,7 +30,7 @@ pub fn vec_none_match<T>(vec: &Vec<T>, predicate: &dyn Fn(&T) -> bool) -> bool {
     true
 }
 
-pub fn get_month_str(month: u32) -> String {
+pub fn month_str(month: u32) -> String {
     match month {
         1 => String::from("Jan"),
         2 => String::from("Feb"),
@@ -104,7 +104,7 @@ pub fn join_str_with(vec: Vec<&str>, with: &str) -> String {
     string
 }
 
-pub fn get_progression_char(percent: u32) -> char {
+pub fn progression_char(percent: u32) -> char {
     if percent == 0 {
         '󰝦'
     } else if percent > 0 && percent <= 13 {
@@ -127,5 +127,3 @@ pub fn get_progression_char(percent: u32) -> char {
         unreachable!()
     }
 }
-
-pub fn destroy<T>(_obj: T) {}

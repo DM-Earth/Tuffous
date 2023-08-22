@@ -22,7 +22,7 @@ pub fn icon(unicode: char) -> Text<'static> {
         .font(ICONS)
         .width(20)
         .horizontal_alignment(alignment::Horizontal::Center)
-        .size(20)
+        .size(18)
 }
 
 pub struct TagStyle;

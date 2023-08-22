@@ -6,9 +6,8 @@ use std::{
     io::{Read, Write},
 };
 use tuffous_core::{
-    get_version,
     util::{parse_date, parse_date_and_time},
-    Todo, TodoInstance,
+    version, Todo, TodoInstance,
 };
 
 pub fn main() {
@@ -108,7 +107,7 @@ fn cli() -> Command {
     Command::new("tuffous")
         .about(format!(
             "A powerful to-do manager in CLI. version {}",
-            get_version()
+            version()
         ))
         .subcommand_required(false)
         .arg_required_else_help(true)
@@ -255,18 +254,18 @@ impl TodoScanner {
 
     pub fn apply_filters(&mut self, matches: &ArgMatches) {
         self.cache.clear();
-        for todo_id in self.instance.get_todos() {
+        for todo_id in self.instance.todos() {
             if !self.cache.contains(&todo_id)
                 && Self::match_filters(matches, self.instance.get(todo_id).unwrap(), true)
             {
                 self.cache.push(todo_id);
-                for father_todo_id in self.instance.get_all_deps(todo_id) {
+                for father_todo_id in self.instance.all_deps(todo_id) {
                     if !self.cache.contains(&father_todo_id) {
                         self.cache.push(father_todo_id);
                     }
                 }
 
-                for child_todo_id in self.instance.get_children(todo_id) {
+                for child_todo_id in self.instance.children(todo_id) {
                     if !self.cache.contains(&child_todo_id)
                         && Self::match_filters(matches, self.instance.get(todo_id).unwrap(), false)
                     {
@@ -478,18 +477,18 @@ impl TodoScanner {
             format!(
                 "{}{}",
                 format_todo(todo),
-                if self.instance.get_children_once(id).is_empty() {
+                if self.instance.children_once(id).is_empty() {
                     String::new()
                 } else {
                     format!(
                         " ({}/{})",
-                        self.instance.get_weight(id, true),
-                        self.instance.get_weight(id, false)
+                        self.instance.weight(id, true),
+                        self.instance.weight(id, false)
                     )
                 }
             ),
         ));
-        for child in self.instance.get_children_once(id) {
+        for child in self.instance.children_once(id) {
             if range.contains(&child) {
                 for mut i in self.as_tree(child, range) {
                     i.string = format!("   {}", i.string);
