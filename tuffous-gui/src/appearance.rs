@@ -21,23 +21,20 @@ pub fn icon(unicode: char) -> Text<'static> {
     text(unicode.to_string())
         .font(ICONS)
         .width(20)
-        .horizontal_alignment(alignment::Horizontal::Center)
+        .align_x(alignment::Horizontal::Center)
         .size(18)
 }
 
-pub struct TagStyle;
-
-impl container::StyleSheet for TagStyle {
-    type Style = Theme;
-
-    fn appearance(&self, style: &Self::Style) -> container::Appearance {
-        container::Appearance {
-            text_color: Some(StyleSheet::from_theme(style).gray),
-            background: None,
-            border_radius: 100.0.into(),
-            border_width: 1.0,
-            border_color: StyleSheet::from_theme(style).gray,
-        }
+pub fn tag_style(theme: &Theme) -> container::Style {
+    container::Style {
+        text_color: Some(StyleSheet::from_theme(theme).gray),
+        background: None,
+        border: iced::Border {
+            color: StyleSheet::from_theme(theme).gray,
+            width: 1.0,
+            radius: 100.0.into(),
+        },
+        shadow: Default::default(),
     }
 }
 
