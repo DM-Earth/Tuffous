@@ -3,12 +3,12 @@ mod config;
 
 use chrono::{Datelike, Local};
 use iced::{
-    alignment, executor, theme,
+    alignment,
     widget::{
         button, column, container, horizontal_space, row, scrollable, text, text_input,
         vertical_space,
     },
-    window, Application, Color, Element, Length, Renderer, Settings, Theme,
+    window, Color, Element, Length, Task, Theme,
 };
 use tuffous_core::{util, Todo, TodoInstance};
 
@@ -25,16 +25,43 @@ struct App {
 }
 
 fn main() -> iced::Result {
-    App::run(Settings {
-        window: window::Settings {
-            size: (850, 700),
-            min_size: Some((600, 650)),
+    let config = config::ConfigInstance::get();
+
+    let mut app = App {
+        instance: TodoInstance::create("."),
+        states: Vec::new(),
+        dep_selection: None,
+        range: Vec::new(),
+        complete_filter: TodoCompleteFilter::NotComplete,
+        view: TodoView::Today,
+        search_cache: String::new(),
+        search: false,
+        config,
+    };
+
+    app.instance.read_all();
+    app.instance.refresh();
+    app.refresh_states();
+    app.refresh_range();
+    app.config.write();
+
+    iced::application("Tuffous", App::update, App::view)
+        .theme(|app: &App| {
+            if app.config.dark_theme {
+                Theme::Dark
+            } else {
+                Theme::Light
+            }
+        })
+        .window(window::Settings {
+            size: iced::Size::new(850.0, 700.0),
+            min_size: Some(iced::Size::new(600.0, 650.0)),
             icon: Some(window::icon::from_file_data(include_bytes!("../icon.png"), None).unwrap()),
             ..window::Settings::default()
-        },
-        default_font: appearance::FONT.as_ref().copied().unwrap_or_default(),
-        ..Settings::default()
-    })
+        })
+        .font(include_bytes!("../fonts/nerd_font.ttf").as_slice())
+        .default_font(appearance::FONT.as_ref().copied().unwrap_or_default())
+        .run_with(|| (app, Task::none()))
 }
 
 #[derive(PartialEq, Eq)]
@@ -210,6 +237,14 @@ impl TodoView {
 }
 
 impl App {
+    pub fn theme(&self) -> Theme {
+        if self.config.dark_theme {
+            Theme::Dark
+        } else {
+            Theme::Light
+        }
+    }
+
     pub fn state(&self, id: u64) -> Option<&TodoState> {
         self.states.iter().find(|&state| state.id == id)
     }
@@ -235,15 +270,19 @@ impl App {
     }
 
     fn view_todos(&self) -> iced::Element<Message> {
-        container(if self.range.is_empty() && !self.search {
+        let inner_content = if self.range.is_empty() && !self.search {
+            let icon_char = self.view.title(&self.instance, self.theme()).0;
+            let gray_color = self.style_sheet().gray;
             container(
-                appearance::icon(self.view.title(&self.instance, self.theme()).0)
-                    .style(theme::Text::Color(self.style_sheet().gray))
+                text(icon_char.to_string())
+                    .font(iced::Font::with_name("Symbols Nerd Font"))
+                    .color(gray_color)
                     .size(80)
-                    .width(Length::Fill),
+                    .width(Length::Fill)
+                    .align_x(alignment::Horizontal::Center),
             )
-            .center_x()
-            .center_y()
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
             .width(Length::Fill)
             .height(Length::Fill)
         } else {
@@ -257,29 +296,29 @@ impl App {
 
             let todo_views = scrollable(
                 column({
-                    let mut vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+                    let mut vec: Vec<Element<'_, Message>> = Vec::new();
 
                     if self.search {
-                        vec.push(horizontal_space(35).into());
+                        vec.push(horizontal_space().width(35).into());
                         vec.push(
                             container(
                                 text_input("Search", &self.search_cache)
                                     .on_input(|s| Message::CacheSearchContent(s))
                                     .width(360),
                             )
-                            .center_x()
+                            .center_x(Length::Fill)
                             .width(Length::Fill)
                             .into(),
                         );
                     }
 
-                    vec.push(horizontal_space(35).into());
+                    vec.push(horizontal_space().width(35).into());
 
                     for todo in &self.instance.todos {
                         if todo.dependents.is_empty() && self.range.contains(&todo.id()) {
                             for view in &mut self.state(todo.id()).unwrap().view(self) {
-                                let mut row_c: Vec<Element<'_, Message, Renderer>> = Vec::new();
-                                row_c.push(horizontal_space(view.0).into());
+                                let mut row_c: Vec<Element<'_, Message>> = Vec::new();
+                                row_c.push(horizontal_space().width(view.0).into());
                                 row_c.append(&mut view.1);
                                 vec.push(
                                     container(container(row(row_c)).max_width(1500))
@@ -295,40 +334,60 @@ impl App {
                 .spacing(7.5),
             );
 
-            container(todo_views).center_x()
-        })
-        .height(Length::Fill)
-        .width(Length::Fill)
-        .into()
+            container(todo_views).center_x(Length::Fill)
+        };
+
+        container(inner_content)
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .into()
     }
 
     fn view_sidebar(&self) -> iced::Element<Message> {
         let height = 30;
-        let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        let mut self_vec: Vec<Element<'_, Message>> = Vec::new();
 
-        self_vec.push(vertical_space(7.5).into());
+        self_vec.push(vertical_space().height(7.5).into());
 
-        let view_button = |view: TodoView| -> Element<'_, Message, Renderer> {
+        let view_button = |view: TodoView| -> Element<'_, Message> {
             row!(
-                horizontal_space(7.5),
+                horizontal_space().width(7.5),
                 container(
                     button(row!(
-                        appearance::icon(view.title(&self.instance, self.theme()).0).style(
-                            theme::Text::Color(view.title(&self.instance, self.theme()).2)
-                        ),
+                        appearance::icon(view.title(&self.instance, self.theme()).0)
+                            .color(view.title(&self.instance, self.theme()).2),
                         text(format!("  {}", view.title(&self.instance, self.theme()).1)).size(15),
-                        horizontal_space(Length::Fill)
+                        horizontal_space().width(Length::Fill)
                     ))
                     .on_press(Message::SwitchView(view.clone()))
-                    .style(theme::Button::Text),
+                    .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    }),
                 )
                 .style(if self.view.eq(&view) {
-                    theme::Container::Box
+                    |theme: &Theme| container::Style {
+                        text_color: None,
+                        background: Some(iced::Background::Color(theme.palette().background)),
+                        border: iced::Border {
+                            color: theme.palette().background,
+                            width: 1.0,
+                            radius: 4.0.into(),
+                        },
+                        shadow: iced::Shadow::default(),
+                    }
                 } else {
-                    theme::Container::Transparent
+                    |_theme: &Theme| container::Style {
+                        text_color: None,
+                        background: None,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    }
                 })
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .align_x(alignment::Horizontal::Left)
                 .width(Length::Fill)
                 .max_width(200)
@@ -354,26 +413,31 @@ impl App {
             }
 
             if !pinned.is_empty() {
-                self_vec.push(vertical_space(15).into());
+                self_vec.push(vertical_space().height(15).into());
                 for pin in pinned {
                     self_vec.push(view_button(TodoView::Project(pin)));
                 }
             }
         }
 
-        self_vec.push(vertical_space(Length::Fill).into());
+        self_vec.push(vertical_space().height(Length::Fill).into());
 
-        let mut controls_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-        controls_vec.push(horizontal_space(7.5).into());
+        let mut controls_vec: Vec<Element<'_, Message>> = Vec::new();
+        controls_vec.push(horizontal_space().width(7.5).into());
 
         controls_vec.push(
             container(
-                button(appearance::icon('󰔎').style(theme::Text::Color(self.style_sheet().gray)))
-                    .style(theme::Button::Text)
+                button(appearance::icon('󰔎').color(self.style_sheet().gray))
+                    .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                     .on_press(Message::UpdateConfig(ConfigMessage::ToggleDarkMode)),
             )
             .height(height)
-            .center_y()
+            .center_y(Length::Shrink)
             .into(),
         );
 
@@ -383,7 +447,7 @@ impl App {
                 .into(),
         );
 
-        self_vec.push(vertical_space(7.5).into());
+        self_vec.push(vertical_space().height(7.5).into());
 
         container(column(self_vec))
             .width(200)
@@ -393,27 +457,32 @@ impl App {
     }
 
     pub fn view_controls(&self) -> iced::Element<Message> {
-        let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        let mut self_vec: Vec<Element<'_, Message>> = Vec::new();
         let height = 45;
-        self_vec.push(horizontal_space(Length::FillPortion(1)).into());
+        self_vec.push(horizontal_space().width(Length::FillPortion(1)).into());
 
         if self.view.allow_create_todo() {
             self_vec.push(
                 container(
                     button(
                         appearance::icon('󰐕')
-                            .style(theme::Text::Color(self.style_sheet().gray))
+                            .color(self.style_sheet().gray)
                             .size(25)
                             .width(Length::FillPortion(2)),
                     )
-                    .style(theme::Button::Text)
+                    .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                     .on_press(Message::CreateTodo),
                 )
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .into(),
             );
-            self_vec.push(horizontal_space(Length::FillPortion(2)).into());
+            self_vec.push(horizontal_space().width(Length::FillPortion(2)).into());
         }
 
         if self
@@ -429,41 +498,51 @@ impl App {
                         } else {
                             '󰘾'
                         })
-                        .style(theme::Text::Color(self.style_sheet().gray))
+                        .color(self.style_sheet().gray)
                         .size(25)
                         .width(Length::FillPortion(2)),
                     )
-                    .style(theme::Button::Text)
+                    .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                     .on_press(Message::SwitchCompleteFilter),
                 )
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .into(),
             );
-            self_vec.push(horizontal_space(Length::FillPortion(2)).into());
+            self_vec.push(horizontal_space().width(Length::FillPortion(2)).into());
         }
 
         self_vec.push(
             container(
                 button(
                     appearance::icon(if self.search { '󰦀' } else { '󰍉' })
-                        .style(theme::Text::Color(self.style_sheet().gray))
+                        .color(self.style_sheet().gray)
                         .size(25)
                         .width(Length::FillPortion(2)),
                 )
-                .style(theme::Button::Text)
+                .style(|theme: &Theme, _status| button::Style {
+                    background: None,
+                    text_color: theme.palette().text,
+                    border: iced::Border::default(),
+                    shadow: iced::Shadow::default(),
+                })
                 .on_press(Message::ToggleSearch),
             )
             .height(height)
-            .center_y()
+            .center_y(Length::Shrink)
             .into(),
         );
 
-        self_vec.push(horizontal_space(Length::FillPortion(1)).into());
+        self_vec.push(horizontal_space().width(Length::FillPortion(1)).into());
         container(row(self_vec))
             .height(height)
-            .center_y()
-            .center_x()
+            .center_y(Length::Shrink)
+            .center_x(Length::Fill)
             .into()
     }
 
@@ -483,56 +562,8 @@ impl App {
     }
 }
 
-impl Application for App {
-    type Executor = executor::Default;
-
-    type Message = Message;
-
-    type Theme = Theme;
-
-    type Flags = Flags;
-
-    fn new(flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
-        let config = config::ConfigInstance::get();
-
-        let mut app = App {
-            instance: TodoInstance::create(&flags.path),
-            states: Vec::new(),
-            dep_selection: None,
-            range: Vec::new(),
-            complete_filter: TodoCompleteFilter::NotComplete,
-            view: TodoView::Today,
-            search_cache: String::new(),
-            search: false,
-            config,
-        };
-
-        app.instance.read_all();
-        app.instance.refresh();
-        app.refresh_states();
-        app.refresh_range();
-        app.config.write();
-
-        (
-            app,
-            iced::font::load(include_bytes!("../fonts/nerd_font.ttf").as_slice())
-                .map(|e| Message::LoadFont(e)),
-        )
-    }
-
-    fn title(&self) -> String {
-        String::from("Tuffous")
-    }
-
-    fn theme(&self) -> Self::Theme {
-        if self.config.dark_theme {
-            Theme::Dark
-        } else {
-            Theme::Light
-        }
-    }
-
-    fn update(&mut self, message: Self::Message) -> iced::Command<Self::Message> {
+impl App {
+    fn update(&mut self, message: Message) -> Task<Message> {
         self.instance.refresh();
         match message {
             Message::TodoMessage(id, msg) => match msg {
@@ -668,7 +699,7 @@ impl Application for App {
                 self.refresh_states();
                 self.refresh_range();
 
-                let destroy = |_command: iced::Command<Message>| {};
+                let destroy = |_task: Task<Message>| {};
                 destroy(self.update(Message::TodoMessage(
                     id,
                     TodoMessage::Edit(EditMessage::ToggleEdit),
@@ -703,15 +734,14 @@ impl Application for App {
                 }
                 self.config.write();
             }
-            _ => (),
         };
 
         self.instance.write_all();
         self.refresh_states();
-        iced::Command::none()
+        Task::none()
     }
 
-    fn view(&self) -> iced::Element<Self::Message> {
+    fn view(&self) -> iced::Element<Message> {
         row(vec![
             self.view_sidebar(),
             column(vec![self.view_todos(), self.view_controls()])
@@ -720,18 +750,6 @@ impl Application for App {
         ])
         .height(Length::Fill)
         .into()
-    }
-}
-
-struct Flags {
-    pub path: String,
-}
-
-impl Default for Flags {
-    fn default() -> Self {
-        Self {
-            path: String::from("."),
-        }
     }
 }
 
@@ -744,7 +762,6 @@ enum Message {
     ToggleSearch,
     CacheSearchContent(String),
     UpdateConfig(ConfigMessage),
-    LoadFont(Result<(), iced::font::Error>),
 }
 
 #[derive(Debug, Clone)]
@@ -791,34 +808,39 @@ impl TodoState {
         }
     }
 
-    pub fn view<'a>(&'a self, app: &'a App) -> Vec<(u16, Vec<Element<'_, Message, Renderer>>)> {
+    pub fn view<'a>(&'a self, app: &'a App) -> Vec<(u16, Vec<Element<'_, Message>>)> {
         let height = 28.0;
 
         let todo = app.instance.get(self.id).unwrap();
-        let mut self_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        let mut self_vec: Vec<Element<'_, Message>> = Vec::new();
 
         if app.instance.children_once(self.id).is_empty() {
-            self_vec.push(horizontal_space(25).into());
+            self_vec.push(horizontal_space().width(25).into());
         } else {
             self_vec.push(
                 container(
                     button(
                         appearance::icon(if self.expanded { '' } else { '' })
-                            .style(theme::Text::Color(app.style_sheet().gray)),
+                            .color(app.style_sheet().gray),
                     )
                     .width(20)
-                    .style(theme::Button::Text)
+                    .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                     .on_press(Message::TodoMessage(
                         self.id.to_owned(),
                         TodoMessage::ExpandToggle,
                     )),
                 )
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .into(),
             );
 
-            self_vec.push(horizontal_space(5).into());
+            self_vec.push(horizontal_space().width(5).into());
         }
 
         self_vec.push(
@@ -826,29 +848,34 @@ impl TodoState {
                 button(
                     appearance::icon(completion_state_view(self.id, &app.instance))
                         .size(17)
-                        .style(theme::Text::Color(
+                        .color(
                             if app.instance.children_once(self.id).is_empty()
                                 && !app.instance.get(self.id).unwrap().completed
                             {
                                 app.style_sheet().gray
                             } else {
                                 app.style_sheet().checkbox
-                            },
-                        )),
+                            }
+                        ),
                 )
                 .on_press(Message::TodoMessage(
                     self.id.to_owned(),
                     TodoMessage::ToggleComplete,
                 ))
-                .style(theme::Button::Text),
+                .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    }),
             )
             .height(height)
-            .center_y()
+            .center_y(Length::Shrink)
             .into(),
         );
 
-        let mut left_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
-        let mut right_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+        let mut left_vec: Vec<Element<'_, Message>> = Vec::new();
+        let mut right_vec: Vec<Element<'_, Message>> = Vec::new();
 
         if !self.editing {
             // Todo information
@@ -858,7 +885,7 @@ impl TodoState {
                         container(
                             appearance::icon('')
                                 .size(15)
-                                .style(theme::Text::Color(app.style_sheet().star))
+                                .color(app.style_sheet().star)
                                 .height(17.5),
                         )
                     } else {
@@ -877,22 +904,41 @@ impl TodoState {
                         )
                     }
                     .style(if time.eq(&Local::now().date_naive()) {
-                        theme::Container::Transparent
+                        |_theme: &Theme| container::Style {
+                            text_color: None,
+                            background: None,
+                            border: iced::Border::default(),
+                            shadow: iced::Shadow::default(),
+                        }
                     } else {
-                        theme::Container::Box
+                        |theme: &Theme| container::Style {
+                            text_color: None,
+                            background: Some(iced::Background::Color(theme.palette().background)),
+                            border: iced::Border {
+                                color: theme.palette().background,
+                                width: 1.0,
+                                radius: 4.0.into(),
+                            },
+                            shadow: iced::Shadow::default(),
+                        }
                     })
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                     .into(),
                 );
 
-                left_vec.push(horizontal_space(3.5).into());
+                left_vec.push(horizontal_space().width(3.5).into());
             }
 
             left_vec.push(
                 container(
                     button(text(&todo.metadata.name).size(15))
-                        .style(theme::Button::Text)
+                        .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                         .on_press(Message::TodoMessage(
                             self.id,
                             TodoMessage::Edit(EditMessage::ToggleEdit),
@@ -900,29 +946,29 @@ impl TodoState {
                         .height(Length::Fill),
                 )
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .into(),
             );
 
             if !todo.tags.is_empty() {
-                left_vec.push(horizontal_space(3.5).into());
+                left_vec.push(horizontal_space().width(3.5).into());
 
                 for tag in &todo.tags {
-                    left_vec.push(horizontal_space(5).into());
+                    left_vec.push(horizontal_space().width(5).into());
 
                     left_vec.push(
                         container(
                             container(text(format!("   {tag}   ")).size(12.5))
-                                .style(theme::Container::Custom(Box::new(appearance::TagStyle)))
+                                .style(|theme| appearance::tag_style(theme))
                                 .height(height - 7.0)
-                                .center_y(),
+                                .center_y(Length::Shrink),
                         )
-                        .center_y()
+                        .center_y(Length::Shrink)
                         .height(height)
                         .into(),
                     );
 
-                    left_vec.push(horizontal_space(2.5).into());
+                    left_vec.push(horizontal_space().width(2.5).into());
                 }
             }
 
@@ -948,10 +994,10 @@ impl TodoState {
                             ddl.time().format("%H:%M")
                         ))
                         .size(14)
-                        .style(theme::Text::Color(app.style_sheet().flag)),
+                        .color(app.style_sheet().flag),
                     )
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                     .into(),
                 );
 
@@ -962,17 +1008,17 @@ impl TodoState {
                         } else {
                             '󰮛'
                         })
-                        .style(theme::Text::Color(app.style_sheet().flag)),
+                        .color(app.style_sheet().flag),
                     )
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                     .into(),
                 );
             }
 
             if let Some((father_id, child_vec)) = &app.dep_selection {
                 if app.instance.is_child_able(*father_id, self.id) || child_vec.contains(&self.id) {
-                    right_vec.push(horizontal_space(7.5).into());
+                    right_vec.push(horizontal_space().width(7.5).into());
                     right_vec.push(
                         container(
                             button(
@@ -983,7 +1029,12 @@ impl TodoState {
                                 })
                                 .size(15),
                             )
-                            .style(theme::Button::Text)
+                            .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                             .on_press(Message::TodoMessage(self.id, TodoMessage::ToggleChild)),
                         )
                         .height(height)
@@ -992,12 +1043,12 @@ impl TodoState {
                 }
             }
         } else {
-            let mut col_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+            let mut col_vec: Vec<Element<'_, Message>> = Vec::new();
 
             // Todo Editing
             col_vec.push(
                 row!(
-                    container(appearance::icon('󰑕')).height(height).center_y(),
+                    container(appearance::icon('󰑕')).height(height).center_y(Length::Shrink),
                     container(
                         text_input("Input title here", &todo.metadata.name)
                             .on_input(|input| {
@@ -1009,13 +1060,13 @@ impl TodoState {
                             .width(350)
                     )
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                 )
                 .into(),
             );
             col_vec.push(
                 row!(
-                    container(appearance::icon('󰟃')).height(height).center_y(),
+                    container(appearance::icon('󰟃')).height(height).center_y(Length::Shrink),
                     container(
                         text_input("Input details here", &todo.metadata.details)
                             .on_input(|input| {
@@ -1027,13 +1078,13 @@ impl TodoState {
                             .width(350)
                     )
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                 )
                 .into(),
             );
             col_vec.push(
                 row!(
-                    container(appearance::icon('󰃯')).height(height).center_y(),
+                    container(appearance::icon('󰃯')).height(height).center_y(Length::Shrink),
                     container(
                         text_input("Input date here", &self.time_cache)
                             .on_input(|input| {
@@ -1045,7 +1096,7 @@ impl TodoState {
                             .width(350)
                     )
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                 )
                 .into(),
             );
@@ -1063,13 +1114,13 @@ impl TodoState {
                             .width(350)
                     )
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                 )
                 .into(),
             );
             col_vec.push(
                 row!(
-                    container(appearance::icon('󰓻')).height(height).center_y(),
+                    container(appearance::icon('󰓻')).height(height).center_y(Length::Shrink),
                     container(
                         text_input(
                             "Separate tags by space",
@@ -1094,67 +1145,96 @@ impl TodoState {
                         .width(350)
                     )
                     .height(height)
-                    .center_y()
+                    .center_y(Length::Shrink)
                 )
                 .into(),
             );
 
             self_vec.push(column(col_vec).into());
 
-            right_vec.push(horizontal_space(8.5).into());
+            right_vec.push(horizontal_space().width(8.5).into());
 
             // Right side controls for editing
-            let mut controls_vec: Vec<Element<'_, Message, Renderer>> = Vec::new();
+            let mut controls_vec: Vec<Element<'_, Message>> = Vec::new();
             controls_vec.push(
                 container(
-                    button(appearance::icon('󰸞').style(theme::Text::Color(app.style_sheet().gray)))
-                        .style(theme::Button::Text)
+                    button(appearance::icon('󰸞').color(app.style_sheet().gray))
+                        .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                         .on_press(Message::TodoMessage(
                             self.id.to_owned(),
                             TodoMessage::Edit(EditMessage::ToggleEdit),
                         )),
                 )
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .into(),
             );
 
             controls_vec.push(
                 container(
-                    button(appearance::icon('󰙅').style(theme::Text::Color(app.style_sheet().gray)))
-                        .style(theme::Button::Text)
+                    button(appearance::icon('󰙅').color(app.style_sheet().gray))
+                        .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                         .on_press(Message::TodoMessage(
                             self.id.to_owned(),
                             TodoMessage::Edit(EditMessage::ToggleSelectChildren),
                         )),
                 )
                 .style(if app.dep_selection.is_none() {
-                    theme::Container::Transparent
+                    |_theme: &Theme| container::Style {
+                        text_color: None,
+                        background: None,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    }
                 } else {
-                    theme::Container::Box
+                    |theme: &Theme| container::Style {
+                        text_color: None,
+                        background: Some(iced::Background::Color(theme.palette().background)),
+                        border: iced::Border {
+                            color: theme.palette().background,
+                            width: 1.0,
+                            radius: 4.0.into(),
+                        },
+                        shadow: iced::Shadow::default(),
+                    }
                 })
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .into(),
             );
             controls_vec.push(
                 container(
-                    button(appearance::icon('󰩹').style(theme::Text::Color(app.style_sheet().gray)))
-                        .style(theme::Button::Text)
+                    button(appearance::icon('󰩹').color(app.style_sheet().gray))
+                        .style(|theme: &Theme, _status| button::Style {
+                        background: None,
+                        text_color: theme.palette().text,
+                        border: iced::Border::default(),
+                        shadow: iced::Shadow::default(),
+                    })
                         .on_press(Message::TodoMessage(
                             self.id.to_owned(),
                             TodoMessage::Delete,
                         )),
                 )
                 .height(height)
-                .center_y()
+                .center_y(Length::Shrink)
                 .into(),
             );
 
             right_vec.push(column(controls_vec).into());
         }
 
-        right_vec.push(horizontal_space(22.5).into());
+        right_vec.push(horizontal_space().width(22.5).into());
 
         self_vec.push(
             container(row(left_vec))
@@ -1170,7 +1250,7 @@ impl TodoState {
                 .into(),
         );
 
-        let mut vec: Vec<(u16, Vec<Element<'_, Message, Renderer>>)> = Vec::new();
+        let mut vec: Vec<(u16, Vec<Element<'_, Message>>)> = Vec::new();
 
         vec.push((
             12,
@@ -1183,9 +1263,9 @@ impl TodoState {
                     if !todo.metadata.details.is_empty() {
                         column_items.push(
                             row![
-                                horizontal_space(60),
+                                horizontal_space().width(60),
                                 text(todo.metadata.details.clone())
-                                    .style(theme::Text::Color(app.style_sheet().gray))
+                                    .color(app.style_sheet().gray)
                                     .size(13.5)
                             ]
                             .into(),
